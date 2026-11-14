@@ -6,8 +6,24 @@ import * as THREE from 'three'
  * public/terrain/moon_dem.{bin,json}.
  *
  * World units: x = east, z = south. ~1.1 units per degree.
+ *
+ * Layout (like the reference diorama): the real DEM sits on a raised central
+ * plateau (MESA) with cliff edges; around it is a flat, coarser "apron" grid.
+ * The apron is a stylized frame only — every hardware site is on the plateau.
  */
-export const WORLD = { width: 120, depth: 100, segX: 130, segZ: 108 }
+export const WORLD = { width: 200, depth: 170, segX: 216, segZ: 184 }
+/** Plateau half-size in world units (covers the DEM crop: lon ±52°, lat ±47°) */
+const MESA = { hx: 55, hz: 45, radius: 10 }
+const APRON_Y = -9
+
+/** 1 on the plateau, 0 on the apron; a ~3-unit cliff with an irregular, natural-looking edge. */
+export function mesaMask(x: number, z: number) {
+  const qx = Math.abs(x) - (MESA.hx - MESA.radius)
+  const qz = Math.abs(z) - (MESA.hz - MESA.radius)
+  const sdf = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - MESA.radius
+  const jitter = 2.2 * Math.sin(x * 0.21) + 1.6 * Math.sin(z * 0.17 + 1.3) + 1.1 * Math.sin((x + z) * 0.33)
+  return 1 - THREE.MathUtils.smoothstep(sdf + jitter, -1.5, 1.5)
+}
 
 export const lonToX = (lon: number) => lon * 1.15
 export const latToZ = (lat: number) => -lat * 1.05
@@ -25,6 +41,8 @@ interface DemMeta {
 export interface Dem {
   /** Terrain height (world units) at world x/z */
   heightAt: (x: number, z: number) => number
+  /** Raw LOLA elevation in meters at lon/lat (degrees) */
+  metersAt: (lon: number, lat: number) => number
   buildGeometry: () => THREE.BufferGeometry
 }
 
@@ -54,8 +72,13 @@ function makeDem(meta: DemMeta, raw: Uint16Array): Dem {
       for (let j = -2; j <= 2; j++) s += metersAt(lon + (i / 4) * cellLon, lat + (j / 4) * cellLat)
     return s / 25
   }
-  const heightAt = (x: number, z: number) => (smoothMetersAt(xToLon(x), zToLat(z)) / 1000) * UNITS_PER_KM
-  return { heightAt, buildGeometry: () => buildTerrainGeometry(heightAt) }
+  const demHeight = (x: number, z: number) => (smoothMetersAt(xToLon(x), zToLat(z)) / 1000) * UNITS_PER_KM
+  const heightAt = (x: number, z: number) => {
+    const m = mesaMask(x, z)
+    if (m <= 0) return APRON_Y
+    return APRON_Y + (demHeight(x, z) - APRON_Y) * m
+  }
+  return { heightAt, metersAt, buildGeometry: () => buildTerrainGeometry(heightAt) }
 }
 
 let demPromise: Promise<Dem> | null = null
@@ -71,35 +94,122 @@ export function loadDem(): Promise<Dem> {
   return demPromise
 }
 
-const C_LOW = new THREE.Color('#3f8f93')
-const C_MID = new THREE.Color('#c8653a')
-const C_HIGH = new THREE.Color('#a6d860')
+// Muted, earthy palette matching the reference: slate lowlands, moss/olive
+// heights, dusty terracotta on steep slopes. Keep saturation low so the UI
+// accents (status green/orange) stay the brightest things on screen.
+const C_SLATE = new THREE.Color('#6f8088')
+const C_OLIVE_DARK = new THREE.Color('#56652f')
+const C_MOSS = new THREE.Color("#9aab55")
+const C_TERRACOTTA = new THREE.Color('#9c5636')
+const C_CLIFF = new THREE.Color("#7a4a33")
+const C_APRON = new THREE.Color("#55636a")
 
 function buildTerrainGeometry(heightAt: (x: number, z: number) => number) {
   const g = new THREE.PlaneGeometry(WORLD.width, WORLD.depth, WORLD.segX, WORLD.segZ)
   g.rotateX(-Math.PI / 2)
   const pos = g.attributes.position as THREE.BufferAttribute
   const colors = new Float32Array(pos.count * 3)
-  let min = Infinity, max = -Infinity
+  const mesa = new Float32Array(pos.count)
   for (let i = 0; i < pos.count; i++) {
-    const h = heightAt(pos.getX(i), pos.getZ(i))
-    pos.setY(i, h)
-    min = Math.min(min, h); max = Math.max(max, h)
+    const x = pos.getX(i), z = pos.getZ(i)
+    mesa[i] = mesaMask(x, z)
+    pos.setY(i, heightAt(x, z))
   }
+  // Color the plateau by elevation *rank* (histogram equalization): lunar heights
+  // cluster in the middle, so a plain min→max ramp paints nearly everything one color.
+  const top = Array.from({ length: pos.count }, (_, i) => i).filter((i) => mesa[i] > 0.98)
+  top.sort((a, b) => pos.getY(a) - pos.getY(b))
+  const rank = new Float32Array(pos.count)
+  top.forEach((idx, r) => { rank[idx] = r / (top.length - 1) })
+  g.computeVertexNormals()
+  const nrm = g.attributes.normal as THREE.BufferAttribute
   const c = new THREE.Color()
   for (let i = 0; i < pos.count; i++) {
-    const t = (pos.getY(i) - min) / (max - min)
-    // low maria → teal, mid → orange, high highlands → green
-    if (t < 0.45) c.copy(C_LOW).lerp(C_MID, t / 0.45)
-    else c.copy(C_MID).lerp(C_HIGH, (t - 0.45) / 0.55)
-    // fade edges into darkness
+    const m = mesa[i]
+    if (m > 0.98) {
+      const t = rank[i]
+      // elevation: slate lowlands → dark olive → moss heights
+      if (t < 0.4) c.copy(C_SLATE).lerp(C_OLIVE_DARK, THREE.MathUtils.smoothstep(t, 0.15, 0.4))
+      else c.copy(C_OLIVE_DARK).lerp(C_MOSS, (t - 0.4) / 0.6)
+      // steep slopes (crater walls, mountain flanks) pick up terracotta patches
+      const slope = 1 - nrm.getY(i)
+      c.lerp(C_TERRACOTTA, THREE.MathUtils.smoothstep(slope, 0.05, 0.22) * 0.75)
+    } else if (m > 0.02) {
+      // cliff face: darker terracotta fading down into the apron
+      c.copy(C_APRON).lerp(C_CLIFF, m)
+    } else {
+      c.copy(C_APRON)
+    }
+    // fade outer edges into darkness
     const ex = Math.abs(pos.getX(i)) / (WORLD.width / 2)
     const ez = Math.abs(pos.getZ(i)) / (WORLD.depth / 2)
-    const fade = 1 - THREE.MathUtils.smoothstep(Math.max(ex, ez), 0.75, 1)
-    c.multiplyScalar(0.25 + 0.75 * fade)
+    const fade = 1 - THREE.MathUtils.smoothstep(Math.max(ex, ez), 0.55, 0.92)
+    c.multiplyScalar(0.15 + 0.85 * fade)
     colors.set([c.r, c.g, c.b], i * 3)
   }
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  g.setAttribute('aMesa', new THREE.BufferAttribute(mesa, 1))
   g.computeVertexNormals()
   return g
+}
+
+/**
+ * Draws the grid in the fragment shader instead of `wireframe: true` (which WebGL
+ * always renders 1px wide). Gives square cells like the reference, constant
+ * on-screen line width via fwidth(), a faint halo and fog — in a single draw call.
+ */
+export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: number) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uCells: { value: new THREE.Vector2(WORLD.segX, WORLD.segZ) },
+      uWidth: { value: 0.9 },              // core line width in px
+      uFill: { value: new THREE.Color('#0a0b0a') },
+      uFog: { value: new THREE.Color(fogColor) },
+      uFogNear: { value: fogNear },
+      uFogFar: { value: fogFar },
+    },
+    vertexShader: /* glsl */ `
+      attribute vec3 color;
+      attribute float aMesa;
+      varying vec2 vUv;
+      varying vec3 vColor;
+      varying float vDepth;
+      varying float vMesa;
+      void main() {
+        vUv = uv;
+        vColor = color;
+        vMesa = aMesa;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vDepth = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec2 uCells;
+      uniform float uWidth;
+      uniform vec3 uFill;
+      uniform vec3 uFog;
+      uniform float uFogNear;
+      uniform float uFogFar;
+      varying vec2 vUv;
+      varying vec3 vColor;
+      varying float vDepth;
+      varying float vMesa;
+      void main() {
+        // apron gets a coarser grid (every 2nd line), like the reference foreground
+        vec2 g = vUv * uCells * (vMesa > 0.5 ? 1.0 : 0.5);
+        vec2 w = fwidth(g);
+        // distance to nearest grid line, in screen pixels
+        vec2 d = abs(fract(g - 0.5) - 0.5) / max(w, 1e-4);
+        float px = min(d.x, d.y);
+        float core = 1.0 - smoothstep(uWidth - 0.5, uWidth + 0.5, px);
+        float glow = exp(-px * 0.9) * 0.12;
+        // fade lines where cells get smaller than ~3px (far away) to avoid moiré
+        float density = clamp(1.0 - (max(w.x, w.y) - 0.2) / 0.3, 0.55, 1.0);
+        vec3 col = uFill + vColor * 0.1 + vColor * (core * 1.7 + glow) * density;
+        float fog = smoothstep(uFogNear, uFogFar, vDepth);
+        gl_FragColor = vec4(mix(col, uFog, fog), 1.0);
+      }
+    `,
+  })
 }

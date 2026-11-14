@@ -1,12 +1,33 @@
 import { useEffect, useState } from 'react'
 import type { Hardware } from '../data/hardware'
+import { loadDem } from '../scene/terrain'
 
-/** Slowly rotating orthographic wireframe Moon with hardware sites. */
+type LatLon = [number, number]
+
+/** Maria (dark lunar "seas") are low basins — pick DEM points well below the mean surface. */
+function mariaPoints(metersAt: (lon: number, lat: number) => number): LatLon[] {
+  const pts: LatLon[] = []
+  for (let lat = -48; lat <= 48; lat += 3)
+    for (let lon = -54; lon <= 54; lon += 3)
+      if (metersAt(lon, lat) < -1700) pts.push([lat, lon])
+  return pts
+}
+
+/** Slowly rotating orthographic wireframe Moon with maria and hardware sites. */
 export default function Globe({ items, selectedId }: { items: Hardware[]; selectedId: string | null }) {
   const [rot, setRot] = useState(0)
+  const [maria, setMaria] = useState<LatLon[]>([])
+
+  useEffect(() => {
+    let alive = true
+    loadDem().then((d) => { if (alive) setMaria(mariaPoints(d.metersAt)) }, (e) => console.error('Globe: failed to load lunar elevation data', e))
+    return () => { alive = false }
+  }, [])
+
   useEffect(() => {
     let raf = 0
-    const tick = (t: number) => { setRot((t / 120) % 360); raf = requestAnimationFrame(tick) }
+    // gentle sway around the near side (where all Apollo/Surveyor sites are)
+    const tick = (t: number) => { setRot(Math.sin(t / 9000) * 35); raf = requestAnimationFrame(tick) }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
   }, [])
@@ -15,7 +36,7 @@ export default function Globe({ items, selectedId }: { items: Hardware[]; select
   const rad = Math.PI / 180
   const project = (lat: number, lon: number) => {
     const l = (lon + rot) * rad
-    return { x: R * Math.cos(lat * rad) * Math.sin(l), y: -R * Math.sin(lat * rad), front: Math.cos(l) > 0 }
+    return { x: R * Math.cos(lat * rad) * Math.sin(l), y: -R * Math.sin(lat * rad), front: Math.cos(l) > 0.05 }
   }
   const meridians = Array.from({ length: 12 }, (_, i) => i * 30)
   const parallels = [-60, -30, 0, 30, 60]
@@ -30,6 +51,12 @@ export default function Globe({ items, selectedId }: { items: Hardware[]; select
         const l = ((m + rot) % 180) * rad
         return <ellipse key={m} rx={Math.abs(R * Math.cos(l))} ry={R} className="globe__line" />
       })}
+      <g className="globe__maria">
+        {maria.map(([lat, lon], i) => {
+          const p = project(lat, lon)
+          return p.front ? <circle key={i} cx={p.x} cy={p.y} r={0.6} /> : null
+        })}
+      </g>
       {items.map((h) => {
         const p = project(h.lat, h.lon)
         if (!p.front) return null

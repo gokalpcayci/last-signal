@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lostronomy Brand</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0d0e0d; --panel: #141513; --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.16);
+    --text: #e6e6df; --dim: #6e706a; --faint: #3d3f3a; --ok: #5fd068; --warn: #e56b47; --gold: #c9a95a;
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace; --sans: 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.6 var(--sans); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 48px 24px 96px; }
+  .label { font: 500 10px var(--mono); letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+  .label b { color: var(--text); font-weight: 500; }
+  header { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap;
+    border-bottom: 1px dashed var(--line-strong); padding-bottom: 20px; margin-bottom: 40px; }
+  header img { height: 72px; max-width: 100%; }
+  section { margin-bottom: 56px; }
+  h2 { font: 500 11px var(--mono); letter-spacing: .16em; color: var(--dim); text-transform: uppercase; margin-bottom: 16px;
+    display: flex; gap: 10px; }
+  h2 span { color: var(--text); }
+  .grid { display: grid; gap: 16px; }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .tile { position: relative; border: 1px solid var(--line); background: var(--panel); padding: 20px; min-height: 260px;
+    display: flex; flex-direction: column; justify-content: space-between; }
+  .tile .art { flex: 1; display: grid; place-items: center; padding: 16px 0; }
+  .hatch { background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgba(255,255,255,.035) 7px 8px); }
+  .tile.light { background: #e6e6df; }
+  .tile.light .label { color: #6e706a; }
+  .tile.light .label b { color: #0d0e0d; }
+  .corner { position: absolute; width: 8px; height: 8px; border-color: var(--line-strong); border-style: solid; }
+  .corner.tl { top: -1px; left: -1px; border-width: 1px 0 0 1px; } .corner.br { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+  .sizes { display: flex; align-items: end; gap: 28px; flex-wrap: wrap; }
+  .sizes figure { display: grid; gap: 8px; justify-items: center; }
+  .swatch { border: 1px solid var(--line); }
+  .swatch .chip { height: 96px; }
+  .swatch .meta { padding: 12px 14px; display: grid; gap: 2px; background: var(--panel); }
+  .swatch .name { font-weight: 500; }
+  .swatch code { font: 11px var(--mono); color: var(--dim); }
+  .type { border: 1px solid var(--line); padding: 24px; background: var(--panel); }
+  .type .big { font-size: 44px; font-weight: 600; letter-spacing: .08em; line-height: 1.1; margin: 10px 0 6px; }
+  .type .mono { font-family: var(--mono); }
+  .rules li { list-style: none; padding: 10px 0; border-bottom: 1px dashed var(--line); display: flex; gap: 12px; }
+  .rules ul { padding: 0; }
+  .yes { color: var(--ok); font: 11px var(--mono); min-width: 34px; } .no { color: var(--warn); font: 11px var(--mono); min-width: 34px; }
+  .voice blockquote { border-left: 2px solid var(--ok); padding: 4px 0 4px 16px; margin: 12px 0; font-size: 16px; }
+  .voice blockquote.bad { border-color: var(--warn); color: var(--dim); text-decoration: line-through; text-decoration-color: rgba(229,107,71,.5); }
+  .dl a { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px dashed var(--line);
+    color: var(--text); text-decoration: none; font: 12px var(--mono); }
+  .dl a:hover { color: #fff; } .dl a span { color: var(--dim); }
+  .clear { position: relative; display: inline-block; padding: 36px; border: 1px dashed rgba(95,208,104,.5); }
+  .clear::after { content: "x = band width"; position: absolute; top: 8px; left: 10px; font: 9px var(--mono); color: var(--ok); }
+  .anatomy { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
+  .anatomy ol { padding-left: 18px; display: grid; gap: 8px; color: var(--dim); }
+  .anatomy ol b { color: var(--text); font-weight: 500; }
+  @media (max-width: 640px) { .anatomy { grid-template-columns: 1fr; justify-items: center; } .type .big { font-size: 30px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <img src="lockup.svg" alt="Lostronomy" />
+  <div class="label">Brand sheet · <b>v1.0</b> · Moon edition</div>
+</header>
+
+<section>
+  <h2>01 <span>The mark</span></h2>
+  <div class="grid g3">
+    <div class="tile hatch"><i class="corner tl"></i><i class="corner br"></i>
+      <div class="art"><img src="app-icon.svg" width="168" height="168" alt="App icon" /></div>
+      <div class="label"><b>App icon</b> · chrome on graphite</div></div>
+    <div class="tile"><i class="corner tl"></i><i class="corner br"></i>
+      <div class="art"><img src="mark.svg" width="150" height="150" alt="Mark, light" /></div>
+      <div class="label"><b>Flat mark</b> · on dark</div></div>
+    <div class="tile light"><i class="corner tl"></i><i class="corner br"></i>
+      <div class="art"><img src="mark-black.svg" width="150" height="150" alt="Mark, dark" /></div>
+      <div class="label"><b>Flat mark</b> · on light</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>02 <span>What it means</span></h2>
+  <div class="tile anatomy" style="min-height:0">
+    <span class="clear"><img src="mark.svg" width="180" height="180" alt="" /></span>
+    <ol>
+      <li><b>Four travellers</b>: spiral orbits chasing each other, like probes still circling long after the mission ended.</li>
+      <li><b>Open eyes</b>: each head is still looking. The hardware went quiet, but it's still out there watching.</li>
+      <li><b>The open centre</b>: the places they were left. Everything circles back to what's been forgotten.</li>
+      <li><b>Flag-cut tails</b>: launched outward from Earth, now curling inward to rest.</li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <h2>03 <span>Sizes &amp; clear space</span></h2>
+  <div class="tile hatch" style="min-height:0">
+    <div class="sizes">
+      <figure><img src="app-icon.svg" width="128" height="128" alt="" /><figcaption class="label">128</figcaption></figure>
+      <figure><img src="app-icon.svg" width="64" height="64" alt="" /><figcaption class="label">64</figcaption></figure>
+      <figure><img src="app-icon.svg" width="32" height="32" alt="" /><figcaption class="label">32</figcaption></figure>
+      <figure><img src="/favicon.svg" width="16" height="16" alt="" /><figcaption class="label">16 · flat</figcaption></figure>
+    </div>
+    <p class="label" style="margin-top:20px">Below 32px use the flat favicon — bevel and chrome turn to mush at small sizes. Keep clear space of one band width on all sides.</p>
+  </div>
+</section>
+
+<section>
+  <h2>04 <span>Colour</span></h2>
+  <div class="grid g3" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+    <div class="swatch"><div class="chip" style="background:#0d0e0d"></div><div class="meta"><span class="name">Void</span><code>#0D0E0D · --bg</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#141513"></div><div class="meta"><span class="name">Graphite</span><code>#141513 · panel</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#e6e6df"></div><div class="meta"><span class="name">Regolith</span><code>#E6E6DF · --text</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#6e706a"></div><div class="meta"><span class="name">Dust</span><code>#6E706A · --dim</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#5fd068"></div><div class="meta"><span class="name">Signal</span><code>#5FD068 · still active</code></div></div>
+    <div class="swatch"><div class="chip" style="background:#e56b47"></div><div class="meta"><span class="name">Silent</span><code>#E56B47 · gone quiet</code></div></div>
+    <div class="swatch"><div class="chip" style="background:linear-gradient(135deg,#fff,#e4e5e0 20%,#a3a6a0 38%,#fbfbf8 49%,#b4b7b0 60%,#686b66 80%,#d2d4ce)"></div><div class="meta"><span class="name">Chrome</span><code>mark finish only</code></div></div>
+  </div>
+  <p class="label" style="margin-top:14px">Green and orange are status colours, never decoration. Chrome is reserved for the mark.</p>
+</section>
+
+<section>
+  <h2>05 <span>Typography</span></h2>
+  <div class="grid g2">
+    <div class="type"><div class="label">Display · Inter 600 · tracked +8%</div>
+      <div class="big">LOSTRONOMY</div>
+      <p style="color:var(--dim)">Headlines and the wordmark. Sentence case for story text, all caps only for titles.</p></div>
+    <div class="type"><div class="label">Interface · JetBrains Mono 400–700</div>
+      <div class="big mono" style="font-size:28px;letter-spacing:.04em">[LUNA 2] 29.1°N</div>
+      <p class="mono" style="color:var(--dim);font-size:12px">LABELS · COORDINATES · COUNTERS · GRID A–F / 1–5</p></div>
+  </div>
+</section>
+
+<section class="grid g2">
+  <div class="voice"><h2>06 <span>Voice</span></h2>
+    <p style="color:var(--dim)">Looks like mission control, talks like a friendly guide. Real facts, short sentences, a bit of wonder.</p>
+    <blockquote>"This rover drove 35 km on the Moon. Its tracks are still there."</blockquote>
+    <blockquote class="bad">"Lunar Roving Vehicle LRV-001 surface traversal: 35.74 km aggregate."</blockquote>
+  </div>
+  <div class="rules"><h2>07 <span>Do / Don't</span></h2>
+    <ul>
+      <li><span class="yes">DO</span>Put the mark on Void or Graphite. Let it breathe.</li>
+      <li><span class="yes">DO</span>Use the flat mark in one colour when chrome won't render.</li>
+      <li><span class="no">DON'T</span>Rotate it, mirror it, or straighten the bands.</li>
+      <li><span class="no">DON'T</span>Fill the open centre, close the eyes, or recolour the mark green/orange.</li>
+      <li><span class="no">DON'T</span>Add outlines, glows or busy photo backgrounds behind it.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="dl">
+  <h2>08 <span>Files</span></h2>
+  <a href="app-icon.svg" download>app-icon.svg <span>chrome tile · vector</span></a>
+  <a href="app-icon-1024.png" download>app-icon-1024.png <span>1024 × 1024</span></a>
+  <a href="lockup.svg" download>lockup.svg <span>horizontal · vector</span></a>
+  <a href="lockup.png" download>lockup.png <span>2400 × 600</span></a>
+  <a href="mark.svg" download>mark.svg <span>flat · light</span></a>
+  <a href="mark-black.svg" download>mark-black.svg <span>flat · dark</span></a>
+  <a href="/favicon.svg" download>favicon.svg <span>16–48 px</span></a>
+  <p class="label" style="margin-top:14px">All generated from one traced arm: <b>python3 scripts/build_brand.py</b></p>
+</section>
+
+</div>
+</body>
+</html>
