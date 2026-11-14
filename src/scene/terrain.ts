@@ -156,13 +156,25 @@ export function loadDem(): Promise<Dem> {
   return demPromise
 }
 
-// Muted, earthy palette matching the reference: slate lowlands, moss/olive
-// heights, dusty terracotta on steep slopes. Keep saturation low so the UI
-// accents (status green/orange) stay the brightest things on screen.
-const C_SLATE = new THREE.Color('#6f8088')
-const C_OLIVE_DARK = new THREE.Color('#56652f')
-const C_MOSS = new THREE.Color("#9aab55")
-const C_TERRACOTTA = new THREE.Color('#9c5636')
+// Muted elevation ramp (by elevation *rank*): deep blue-slate basins → teal-grey →
+// olive → ochre/sand → pale regolith peaks. It widens *brightness* more than hue — that's
+// what reads as depth, and in halftone it also drives dot size. Rule: no saturated green
+// or orange in the terrain; those mean "still working" / "silent" on the markers.
+const RAMP: [number, THREE.Color][] = [
+  [0.0, new THREE.Color('#34505e')],
+  [0.25, new THREE.Color('#5a7a7c')],
+  [0.5, new THREE.Color('#6b7444')],
+  [0.75, new THREE.Color('#8d7b4d')],
+  [1.0, new THREE.Color('#a39876')],
+]
+function rampAt(t: number, out: THREE.Color) {
+  let k = 1
+  while (k < RAMP.length - 1 && t > RAMP[k][0]) k++
+  const [t0, c0] = RAMP[k - 1], [t1, c1] = RAMP[k]
+  return out.copy(c0).lerp(c1, THREE.MathUtils.smoothstep(t, t0, t1))
+}
+// steep slopes: rust-brown, kept well away from the markers' status orange
+const C_RUST = new THREE.Color('#74503a')
 const C_CLIFF = new THREE.Color("#7a4a33")
 const C_APRON = new THREE.Color("#55636a")
 
@@ -199,15 +211,13 @@ function buildTerrainGeometry(dem: Dem, kmAt: (x: number, z: number) => number) 
     const m = mesa[i]
     if (m > 0.98) {
       const t = rank[i]
-      // elevation: slate lowlands → dark olive → moss heights
-      if (t < 0.4) c.copy(C_SLATE).lerp(C_OLIVE_DARK, THREE.MathUtils.smoothstep(t, 0.15, 0.4))
-      else c.copy(C_OLIVE_DARK).lerp(C_MOSS, (t - 0.4) / 0.6)
-      // steep slopes (crater walls, mountain flanks) pick up terracotta patches
+      rampAt(t, c)
+      // steep slopes (crater walls, mountain flanks) pick up rust-brown patches
       const slope = 1 - nrm.getY(i)
-      c.lerp(C_TERRACOTTA, THREE.MathUtils.smoothstep(slope, 0.05, 0.22) * 0.75)
+      c.lerp(C_RUST, THREE.MathUtils.smoothstep(slope, 0.05, 0.22) * 0.6)
       // real LRO brightness: dark maria dim, bright highlands and crater rays lift
       const a = THREE.MathUtils.clamp((alb[i] - aLo) / Math.max(aHi - aLo, 1e-3), 0, 1)
-      c.multiplyScalar(0.6 + 0.75 * a)
+      c.multiplyScalar(0.62 + 0.55 * a) // bright highlands lift, but never toward white
     } else if (m > 0.02) {
       // cliff face: darker terracotta fading down into the apron
       c.copy(C_APRON).lerp(C_CLIFF, m)
@@ -264,6 +274,9 @@ export const REVEAL_MAX = Math.hypot(WORLD.width / 2, WORLD.depth / 2) + 10
  *  - live day/night shading from the Sun's position (uSunLon)
  *  - the boot-up reveal: a ring that grows from the center (uReveal)
  */
+/** uLava value meaning "no lava" (below the deepest near-side point, −5.6 km) */
+export const LAVA_OFF = -9
+
 export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: number) {
   // THREE.Color('#hex') is stored in linear space, but this shader writes gl_FragColor as-is
   // (no colorspace conversion), so hand it the sRGB components to match the CSS/scene background.
@@ -283,6 +296,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uReveal: { value: REVEAL_MAX },        // world-unit radius revealed so far
       uDegX: { value: 1 / X_PER_DEG },       // world x → degrees lon
       uDegZ: { value: -1 / Z_PER_DEG },      // world z → degrees lat
+      uLava: { value: LAVA_OFF },            // lava-flood level in km of real elevation
     },
     vertexShader: /* glsl */ `
       attribute vec3 color;
@@ -324,6 +338,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uniform float uContourStep;
       uniform float uSunLon;
       uniform float uReveal;
+      uniform float uLava;
       varying vec2 vUv;
       varying vec3 vColor;
       varying float vDepth;
@@ -335,6 +350,13 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       varying vec3 vWorld;
 
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+      // One halftone dot per unit cell of hv (already rotated); dot area follows the light.
+      float halftone(vec2 hv, float light) {
+        float aa = max(length(fwidth(hv)), 1e-4);
+        float rad = 0.5 * sqrt(light);
+        return 1.0 - smoothstep(rad - aa, rad + aa, length(fract(hv) - 0.5));
+      }
 
       float lineAA(float v, float widthPx) {
         float w = fwidth(v);
@@ -357,6 +379,32 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         float glow = exp(-px * 0.9) * 0.12;
         float density = clamp(1.0 - (max(w.x, w.y) - 0.2) / 0.3, 0.55, 1.0);
 
+        // ── live day/night: Sun elevation at this point (sub-solar latitude ≈ 0) ──
+        float sunDot = cos(vLonLat.y) * cos(vLonLat.x - uSunLon);
+        float day = smoothstep(-0.02, 0.09, sunDot);
+
+        // ── hillshade: facet normal from screen-space derivatives (free, and it follows the
+        //    true-scale morph). Lit by the real Sun on the day side — low Sun near the
+        //    terminator = long dramatic shading — and a soft NW map light on the night side. ──
+        vec3 nrm = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+        if (nrm.y < 0.0) nrm = -nrm;
+        float dl = uSunLon - vLonLat.x;
+        vec3 sunL = normalize(vec3(sin(dl), sunDot, sin(vLonLat.y) * cos(dl))); // x east, y up, z south
+        vec3 L = normalize(mix(normalize(vec3(-0.6, 0.6, -0.55)), sunL, day));
+        float light = clamp(0.5 + (dot(nrm, L) - L.y) * 2.5, 0.0, 1.0); // 0.5 = flat ground
+
+        // ── halftone surface: a 45° dot screen (3 per grid cell) between the grid lines.
+        //    Dot area follows the light, so lit slopes print big dots and shadowed ones
+        //    almost none. LOD keeps ≥ ~6 px per dot at any distance by halving the dot
+        //    frequency level by level and cross-fading between levels (like mipmaps). ──
+        vec2 hv = mat2(0.7071, -0.7071, 0.7071, 0.7071) * (vUv * uCells * 3.0);
+        float lv = max(0.0, log2(length(fwidth(hv)) * 6.0));
+        float l0 = floor(lv);
+        float dotm = mix(halftone(hv / exp2(l0), light), halftone(hv / exp2(l0 + 1.0), light), lv - l0);
+        vec3 ground = vColor * (0.03 + 0.8 * dotm);
+        // grid lines; on shadowed slopes they step back and the dots carry the shading
+        vec3 lines = vColor * (core * 1.7 + glow) * density * mix(0.45, 1.15, light);
+
         // ── edge fade: the ground goes first, the grid lines outlive it and then break up
         //    into stipple fragments (anchored to the ground, so they don't shimmer) ──
         float groundKeep = 1.0 - smoothstep(0.15, 0.7, vEdge);
@@ -365,7 +413,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         float stipple = step(cut, hash(floor(vXZ * 2.6)) * 0.85 + 0.15 * (1.0 - cut));
         lineKeep *= mix(1.0, stipple, smoothstep(0.35, 0.55, vEdge));
 
-        vec3 lit = vColor * 0.1 * groundKeep + vColor * (core * 1.7 + glow) * density * lineKeep;
+        vec3 lit = ground * groundKeep + lines * lineKeep;
 
         // ── contour lines on the plateau: every 1 km, brighter every 5 km ──
         float onTop = smoothstep(0.9, 1.0, vMesa) * groundKeep;
@@ -373,11 +421,25 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         float major = lineAA(vHeight / (uContourStep * 5.0), 0.8) * 0.4;
         lit += vec3(0.85, 0.82, 0.7) * max(minor, major) * onTop;
 
-        // ── live day/night: Sun elevation at this point (sub-solar latitude ≈ 0) ──
-        float sunDot = cos(vLonLat.y) * cos(vLonLat.x - uSunLon);
-        float day = smoothstep(-0.02, 0.09, sunDot);
-        lit *= mix(0.42, 1.0, day); // night dims the light, never the base
+        // night dims the light, never the base. It isn't black: Earthshine (sunlight bounced
+        // off Earth, which hangs over the near side) lights it faintly blue
+        lit *= mix(vec3(0.36, 0.42, 0.58), vec3(1.0), day);
         vec3 col = uFill + lit;
+
+        // ── lava flood, drawn in the dashboard's own language (not realistic lava): the
+        //    flooded area gets the UI's diagonal hatching in the gold accent, screen-aligned
+        //    like the hatched panels (even density at any distance, no shimmer), and the
+        //    terrain under it is dimmed so the region reads as "covered". ──
+        float flood = smoothstep(0.9, 1.0, vMesa) * groundKeep;
+        float below = uLava - vHeight;
+        vec3 gold = vec3(0.79, 0.66, 0.35); // --gold #c9a95a
+        if (below > 0.0) {
+          float hatch = lineAA((gl_FragCoord.x + gl_FragCoord.y) / 7.0, 0.75);
+          col = mix(col, uFill + col * 0.3 + gold * (0.07 + hatch * 0.32), flood);
+        }
+        // shoreline: a thin gold line exactly at the level (like a contour, no glow)
+        float shore = 1.0 - smoothstep(0.6, 1.4, abs(below) / max(fwidth(vHeight), 1e-4));
+        col += gold * shore * 0.5 * flood;
 
         // bright leading edge while booting
         col += vec3(0.55, 0.85, 0.6) * ring * step(uReveal, ${REVEAL_MAX.toFixed(1)} - 1.0) * 0.6;

@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import * as THREE from 'three'
 import {
-  applyVerticalScale, latToZ, loadDem, lonToX, makeGridMaterial, REVEAL_MAX, TRUE_UNITS_PER_KM, UNITS_PER_KM,
+  applyVerticalScale, LAVA_OFF, latToZ, loadDem, lonToX, makeGridMaterial, REVEAL_MAX, TRUE_UNITS_PER_KM, UNITS_PER_KM,
   worldToLonLat, type Dem,
 } from "./terrain"
 import { subsolarLon } from './sun'
@@ -18,6 +18,8 @@ interface Props {
   onSelect: (id: string | null) => void
   /** Show relief at true vertical scale instead of exaggerated */
   trueScale: boolean
+  /** Lava-flood level in km of real elevation, or null for no lava */
+  lavaLevel: number | null
 }
 
 type Vec3 = [number, number, number]
@@ -61,7 +63,12 @@ export interface ProbeHit {
   point: Vec3
 }
 
-function Terrain({ dem, trueScale, onProbe }: { dem: Dem; trueScale: boolean; onProbe: (hit: ProbeHit | null) => void }) {
+function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
+  dem: Dem
+  trueScale: boolean
+  lavaLevel: number | null
+  onProbe: (hit: ProbeHit | null) => void
+}) {
   const geo = useMemo(() => dem.buildGeometry(), [dem])
   const mat = useMemo(() => makeGridMaterial(BG, FOG_NEAR, FOG_FAR), [])
   // Uniforms are updated through this ref (per frame / per minute), never via the memoized value.
@@ -90,6 +97,17 @@ function Terrain({ dem, trueScale, onProbe }: { dem: Dem; trueScale: boolean; on
     const to = trueScale ? TRUE_UNITS_PER_KM : UNITS_PER_KM
     if (to !== dem.unitsPerKm) morph.current = { from: dem.unitsPerKm, to, t0: null }
   }, [trueScale, dem])
+  // Lava: ease the shader level toward the target, so switching on makes it rise from the
+  // deepest basin, switching off drains it, and slider drags glide (frame-rate independent).
+  const lavaTarget = lavaLevel ?? LAVA_OFF
+  useFrame((_, delta) => {
+    const m = matRef.current
+    if (!m) return
+    const u = m.uniforms.uLava
+    if (skip) { u.value = lavaTarget; return }
+    u.value += (lavaTarget - u.value) * (1 - Math.exp(-delta * 2.2))
+  })
+
   useFrame(({ clock }) => {
     const mo = morph.current
     if (mo) {
@@ -252,7 +270,7 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
   )
 }
 
-export default function MoonScene({ items, selectedId, onSelect, trueScale }: Props) {
+export default function MoonScene({ items, selectedId, onSelect, trueScale, lavaLevel }: Props) {
   const [dem, setDem] = useState<Dem | null>(null)
   useEffect(() => {
     let alive = true
@@ -308,7 +326,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale }: Pr
       >
         <color attach="background" args={[BG]} />
         <fog attach="fog" args={[BG, FOG_NEAR, FOG_FAR]} />
-        {dem && <Terrain dem={dem} trueScale={trueScale} onProbe={onProbe} />}
+        {dem && <Terrain dem={dem} trueScale={trueScale} lavaLevel={lavaLevel} onProbe={onProbe} />}
         <ProbeCross crossRef={probeCross} />
         {dem && polesOn && <Poles dem={dem} positions={positions} />}
         {dem && polesOn && reflectors.length > 0 && <LaserBeams dem={dem} anchors={reflectors} />}

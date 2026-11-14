@@ -345,3 +345,15 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (max-width: 760px) { .feature--mare, .feature--mountains { letter-spacing: .18em; font-size: 8px; } }
 @media (prefers-reduced-motion: reduce) { .features { transition: none; } }
 
+
+/* ── lava flood control (pops up above the toolbar) ── */
+.toolbar .toolbar__lava { color: var(--gold); }
+.toolbar .toolbar__lava.is-on { color: var(--gold); background: #23211a; }
+.lava { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: min(300px, calc(100vw - 32px));
+  background: rgba(20, 21, 19, .94); border: 1px solid var(--line-strong); padding: 10px 12px 12px; }
+.lava__head { display: flex; justify-content: space-between; font: 9.5px var(--mono); letter-spacing: .08em; color: var(--dim); margin-bottom: 6px; }
+.lava__head b { color: var(--gold); font-weight: 500; }
+.lava input { width: 100%; accent-color: var(--gold); }
+.lava p { margin-top: 8px; font-size: 11.5px; line-height: 1.45; color: #cfcfc6; }
+/* phones: keep the map visible — level + slider only */
+@media (max-width: 760px) { .lava p { display: none; } .lava { padding: 8px 10px; } }

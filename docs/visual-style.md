@@ -38,6 +38,14 @@ Every hardware marker is the **flat mark**, tinted by status (green still workin
 Regolith white when selected), scaled up on hover. No box or tile behind it. Static: no idle animation.
 Laser beams only appear on the selected mirror. → `.marker__ink` in `src/index.css`
 
+### On the map: terrain
+
+The surface is **printed, not painted**: a halftone dot screen between the grid lines, dot size
+driven by real sunlight on each slope (big dots on lit slopes, almost none in shadow). Elevation
+colours are muted (blue-slate basins → olive → ochre highlands) and never saturated green/orange.
+Overlays use the UI's own language: the lava flood is **gold diagonal hatching** with a thin gold
+shoreline — realistic glowing lava was tried and rejected as off-style. → grid shader in `src/scene/terrain.ts`
+
 ## 3. Static surface finishes
 
 Use these for still images: posters, slides, video frames, section backgrounds.

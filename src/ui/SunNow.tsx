@@ -17,7 +17,7 @@ export default function SunNow({ lat, lon, name }: { lat: number; lon: number; n
       <span className="sunnow__tag">{s.isDay ? '☀ LUNAR DAY · LIVE' : '☾ LUNAR NIGHT · LIVE'}</span>
       {s.isDay
         ? <>The Sun is up at the {name} site right now, about {Math.round(s.elevation)}° above the horizon. The ground is roughly {s.tempC} °C. Sunset in {fmtDays(s.daysUntilChange)}.</>
-        : <>It’s night at the {name} site right now — about −170 °C. Sunrise in {fmtDays(s.daysUntilChange)}. A full lunar day lasts about two Earth weeks.</>}
+        : <>It’s night at the {name} site right now — about −170 °C. Sunrise in {fmtDays(s.daysUntilChange)}. It isn’t pitch black, though: sunlight bouncing off Earth — “Earthshine” — gives the ground a faint blue glow.</>}
     </div>
   )
 }

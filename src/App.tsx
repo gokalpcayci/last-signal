@@ -14,6 +14,11 @@ import SignalChart, { ARRIVAL_ORDER, arrivedCount } from './ui/SignalChart'
 import StrandedGame from './ui/StrandedGame'
 import { EXAGGERATION } from './scene/terrain'
 
+// near-side LOLA elevations run −5.6 … +5.6 km (median −1.3)
+const LAVA_MIN_KM = -5.6
+const LAVA_MAX_KM = 1
+const LAVA_DEFAULT_KM = -1.6
+
 type Filter = 'all' | HardwareKind
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All hardware' },
@@ -59,6 +64,8 @@ export default function App() {
   /** chart playhead (decimal year); null = today, nothing hidden */
   const [until, setUntil] = useState<number | null>(null)
   const [trueScale, setTrueScale] = useState(false)
+  // Lava flood (km of real elevation); null = off. −1.6 km fills roughly the maria.
+  const [lava, setLava] = useState<number | null>(null)
   const currentFilter = FILTERS.find((f) => f.id === filter)?.label ?? 'All hardware'
   const rightRef = useRef<HTMLElement>(null)
 
@@ -95,7 +102,7 @@ export default function App() {
         </div>
 
         <div className="scene">
-          <MoonScene items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} />
+          <MoonScene items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} />
         </div>
 
         {/* top-left: logo + nav */}
@@ -179,6 +186,26 @@ export default function App() {
             title={trueScale ? 'True scale: the Moon is really this flat' : `Mountains are stretched ×${EXAGGERATION} so you can see them. Click for true scale`}
             onClick={() => setTrueScale((v) => !v)}
           >{trueScale ? '1:1' : `×${EXAGGERATION}`}</button>
+          <button
+            className={`toolbar__scale toolbar__lava${lava !== null ? ' is-on' : ''}`}
+            aria-pressed={lava !== null}
+            title="Lava flood: see how the dark “seas” formed"
+            onClick={() => setLava((v) => (v === null ? LAVA_DEFAULT_KM : null))}
+          >LAVA</button>
+          {lava !== null && (
+            <div className="lava">
+              <div className="lava__head">
+                <span>LAVA LEVEL</span>
+                <b>{lava < 0 ? '−' : '+'}{Math.abs(lava).toFixed(1)} km</b>
+              </div>
+              <input
+                type="range" min={LAVA_MIN_KM} max={LAVA_MAX_KM} step={0.1} value={lava}
+                aria-label="Lava level in kilometres"
+                onChange={(e) => setLava(Number(e.target.value))}
+              />
+              <p>3–4 billion years ago, lava flooded the Moon’s low basins and froze into the dark “seas” (maria) you can still see from Earth.</p>
+            </div>
+          )}
         </div>
 
         {/* bottom row */}
