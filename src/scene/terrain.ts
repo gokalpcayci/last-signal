@@ -34,6 +34,13 @@ function mesaSdf(x: number, z: number) {
   return sdf + jitter
 }
 
+/**
+ * Width (world units) of the fade at the plateau's rim. Wide on purpose: seen at a grazing
+ * angle, a narrow world-space band squashes into a few pixels and reads as a hard black edge.
+ * Sites reach |z| ≈ 31 (Tycho), safely inside the fade's start.
+ */
+const EDGE_FADE = 32
+
 /** 1 on the plateau, 0 on the apron; a ~3-unit cliff. */
 export function mesaMask(x: number, z: number) {
   return 1 - THREE.MathUtils.smoothstep(mesaSdf(x, z), -1.5, 1.5)
@@ -167,6 +174,7 @@ function buildTerrainGeometry(dem: Dem, kmAt: (x: number, z: number) => number) 
   const mesa = new Float32Array(pos.count)
   const alb = new Float32Array(pos.count)
   const km = new Float32Array(pos.count)
+  const edge = new Float32Array(pos.count)
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i)
     mesa[i] = mesaMask(x, z)
@@ -206,14 +214,14 @@ function buildTerrainGeometry(dem: Dem, kmAt: (x: number, z: number) => number) 
     } else {
       c.copy(C_APRON)
     }
-    // The terrain never "ends": over the plateau's last ~18 units its colors dissolve
-    // into darkness, and the cliff and apron beyond stay nearly black.
-    const edge = THREE.MathUtils.smoothstep(mesaSdf(pos.getX(i), pos.getZ(i)), -18, -2)
-    c.multiplyScalar(1 - 0.94 * edge)
     colors.set([c.r, c.g, c.b], i * 3)
+    // The terrain never "ends": 0 deep inside the plateau → 1 at its rim (and beyond).
+    // The shader fades ground, grid lines and a stipple break-up on separate curves of this.
+    edge[i] = THREE.MathUtils.clamp((mesaSdf(pos.getX(i), pos.getZ(i)) + EDGE_FADE) / EDGE_FADE, 0, 1)
   }
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   g.setAttribute("aMesa", new THREE.BufferAttribute(mesa, 1))
+  g.setAttribute("aEdge", new THREE.BufferAttribute(edge, 1))
   // keep real elevation (in km, scale-independent) for contour lines
   const elev = new Float32Array(pos.count)
   const curve = new Float32Array(pos.count)
@@ -257,12 +265,17 @@ export const REVEAL_MAX = Math.hypot(WORLD.width / 2, WORLD.depth / 2) + 10
  *  - the boot-up reveal: a ring that grows from the center (uReveal)
  */
 export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: number) {
+  // THREE.Color('#hex') is stored in linear space, but this shader writes gl_FragColor as-is
+  // (no colorspace conversion), so hand it the sRGB components to match the CSS/scene background.
+  const bg = new THREE.Color(fogColor).convertLinearToSRGB()
   return new THREE.ShaderMaterial({
     uniforms: {
       uCells: { value: new THREE.Vector2(WORLD.segX, WORLD.segZ) },
       uWidth: { value: 0.9 },              // core line width in px
-      uFill: { value: new THREE.Color('#0a0b0a') },
-      uFog: { value: new THREE.Color(fogColor) },
+      // ground base = the background colour: the surface can only ever add light, so a
+      // fading terrain never turns darker than the sky behind it (no black silhouette)
+      uFill: { value: bg },
+      uFog: { value: bg },
       uFogNear: { value: fogNear },
       uFogFar: { value: fogFar },
       uContourStep: { value: 1 },            // aElev is in km: a line every 1 km
@@ -274,6 +287,9 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
     vertexShader: /* glsl */ `
       attribute vec3 color;
       attribute float aMesa;
+      attribute float aEdge;
+      varying float vEdge;
+      varying vec3 vWorld;
       attribute float aElev;
       uniform float uDegX;
       uniform float uDegZ;
@@ -288,6 +304,8 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         vUv = uv;
         vColor = color;
         vMesa = aMesa;
+        vEdge = aEdge;
+        vWorld = position; // the terrain mesh sits at the origin: local = world
         vHeight = aElev; // real (uncurved) elevation
         vXZ = position.xz;
         vLonLat = radians(vec2(position.x * uDegX, position.z * uDegZ));
@@ -313,6 +331,10 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       varying float vHeight;
       varying vec2 vXZ;
       varying vec2 vLonLat;
+      varying float vEdge;
+      varying vec3 vWorld;
+
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
       float lineAA(float v, float widthPx) {
         float w = fwidth(v);
@@ -334,24 +356,41 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         float core = 1.0 - smoothstep(uWidth - 0.5, uWidth + 0.5, px);
         float glow = exp(-px * 0.9) * 0.12;
         float density = clamp(1.0 - (max(w.x, w.y) - 0.2) / 0.3, 0.55, 1.0);
-        vec3 col = uFill + vColor * 0.1 + vColor * (core * 1.7 + glow) * density;
+
+        // ── edge fade: the ground goes first, the grid lines outlive it and then break up
+        //    into stipple fragments (anchored to the ground, so they don't shimmer) ──
+        float groundKeep = 1.0 - smoothstep(0.15, 0.7, vEdge);
+        float lineKeep = 1.0 - smoothstep(0.35, 0.95, vEdge);
+        float cut = smoothstep(0.4, 0.95, vEdge);
+        float stipple = step(cut, hash(floor(vXZ * 2.6)) * 0.85 + 0.15 * (1.0 - cut));
+        lineKeep *= mix(1.0, stipple, smoothstep(0.35, 0.55, vEdge));
+
+        vec3 lit = vColor * 0.1 * groundKeep + vColor * (core * 1.7 + glow) * density * lineKeep;
 
         // ── contour lines on the plateau: every 1 km, brighter every 5 km ──
-        // fade overlays with the vertex color so they dissolve at the map's dark edges too
-        float onTop = smoothstep(0.9, 1.0, vMesa) * clamp(length(vColor) * 3.0, 0.0, 1.0);
+        float onTop = smoothstep(0.9, 1.0, vMesa) * groundKeep;
         float minor = lineAA(vHeight / uContourStep, 0.6) * 0.22;
         float major = lineAA(vHeight / (uContourStep * 5.0), 0.8) * 0.4;
-        col += vec3(0.85, 0.82, 0.7) * max(minor, major) * onTop;
+        lit += vec3(0.85, 0.82, 0.7) * max(minor, major) * onTop;
 
         // ── live day/night: Sun elevation at this point (sub-solar latitude ≈ 0) ──
         float sunDot = cos(vLonLat.y) * cos(vLonLat.x - uSunLon);
         float day = smoothstep(-0.02, 0.09, sunDot);
-        col *= mix(0.42, 1.0, day);
+        lit *= mix(0.42, 1.0, day); // night dims the light, never the base
+        vec3 col = uFill + lit;
 
         // bright leading edge while booting
         col += vec3(0.55, 0.85, 0.6) * ring * step(uReveal, ${REVEAL_MAX.toFixed(1)} - 1.0) * 0.6;
 
+        // distance fog (eased, so the far third of the view dims steadily), and past the
+        // last line fragments the surface settles to exactly the background colour
         float fog = smoothstep(uFogNear, uFogFar, vDepth);
+        fog = max(fog * fog * (3.0 - 2.0 * fog), smoothstep(0.85, 1.0, vEdge));
+        // horizon: where the line of sight skims the curved surface, let it melt into the
+        // background instead of ending in a bright silhouette (planet normal, relief ignored)
+        vec3 planetN = normalize(vWorld - vec3(0.0, -${CURVE_R.toFixed(1)}, 0.0));
+        float graze = dot(planetN, normalize(cameraPosition - vWorld));
+        fog = max(fog, 1.0 - smoothstep(0.02, 0.2, graze));
         gl_FragColor = vec4(mix(col, uFog, fog), 1.0);
       }
     `,

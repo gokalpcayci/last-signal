@@ -23,7 +23,7 @@ interface Props {
 type Vec3 = [number, number, number]
 const MARKER_LIFT = 1.4
 const BG = "#0d0e0d"
-const FOG_NEAR = 90
+const FOG_NEAR = 60
 const FOG_FAR = 175
 
 // Boot-up sequence (seconds): the grid grows out from the center, then markers
@@ -266,9 +266,10 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale }: Pr
   const els = useRef(new Map<string, HTMLElement>())
   const featureEls = useRef(new Map<string, HTMLElement>())
 
+  // Laser beam only on the selected mirror: nothing to animate or draw otherwise.
   const reflectors = useMemo(() => items
-    .filter((h) => h.kind === 'reflector' && positions.has(h.id))
-    .map((h) => { const p = positions.get(h.id)!; return { id: h.id, x: p[0], z: p[2] } }), [items, positions])
+    .filter((h) => h.kind === 'reflector' && h.id === selectedId && positions.has(h.id))
+    .map((h) => { const p = positions.get(h.id)!; return { id: h.id, x: p[0], z: p[2] } }), [items, selectedId, positions])
   const rovers = useMemo(() => new Set(items.filter((h) => h.kind === 'rover').map((h) => h.id)), [items])
   const selectedMission = items.find((h) => h.id === selectedId)?.mission ?? null
   const probeLabel = useRef<HTMLDivElement>(null)
@@ -310,7 +311,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale }: Pr
         {dem && <Terrain dem={dem} trueScale={trueScale} onProbe={onProbe} />}
         <ProbeCross crossRef={probeCross} />
         {dem && polesOn && <Poles dem={dem} positions={positions} />}
-        {dem && polesOn && <LaserBeams dem={dem} anchors={reflectors} />}
+        {dem && polesOn && reflectors.length > 0 && <LaserBeams dem={dem} anchors={reflectors} />}
         {dem && polesOn && <Traverses dem={dem} visibleRovers={rovers} highlightMission={selectedMission} />}
         {dem && <Projector dem={dem} positions={positions} els={els} />}
         {dem && <FeatureProjector dem={dem} features={features} els={featureEls} />}
@@ -342,7 +343,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale }: Pr
             style={{ display: 'none', '--ping-delay': `${BOOT_MARKERS_START_S + (order.get(h.id) ?? 0) * BOOT_MARKER_STEP_S}s` } as React.CSSProperties}
           >
             <span className="marker__ping" aria-hidden />
-            <span className="marker__icon">{h.status === 'active' ? '✓' : '!'}</span>
+            <span className="marker__ink" />
           </button>
         ))}
       </div>

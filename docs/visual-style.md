@@ -32,6 +32,12 @@ have small rounded fillets like real ink. → `scripts/build_brand.py`
 
 ---
 
+### On the map: markers
+
+Every hardware marker is the **flat mark**, tinted by status (green still working, orange silent,
+Regolith white when selected), scaled up on hover. No box or tile behind it. Static: no idle animation.
+Laser beams only appear on the selected mirror. → `.marker__ink` in `src/index.css`
+
 ## 3. Static surface finishes
 
 Use these for still images: posters, slides, video frames, section backgrounds.

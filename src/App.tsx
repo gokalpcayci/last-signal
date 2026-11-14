@@ -10,7 +10,7 @@ import {
 } from './ui/icons'
 import NavEdge from './ui/NavEdge'
 import { LedLogo } from './ui/LedLogo'
-import SignalChart, { inRange, type TimeRange } from './ui/SignalChart'
+import SignalChart, { ARRIVAL_ORDER, arrivedCount } from './ui/SignalChart'
 import { EXAGGERATION } from './scene/terrain'
 
 type Filter = 'all' | HardwareKind
@@ -62,7 +62,8 @@ export default function App() {
     mq.addEventListener('change', on)
     return () => mq.removeEventListener('change', on)
   }, [])
-  const [timeRange, setTimeRange] = useState<TimeRange | null>(null)
+  /** chart playhead (decimal year); null = today, nothing hidden */
+  const [until, setUntil] = useState<number | null>(null)
   const [trueScale, setTrueScale] = useState(false)
   const currentFilter = FILTERS.find((f) => f.id === filter)?.label ?? 'All hardware'
   const rightRef = useRef<HTMLElement>(null)
@@ -74,10 +75,12 @@ export default function App() {
     return () => clearTimeout(t)
   }, [selectedId])
 
-  const items = useMemo(
-    () => hardware.filter((h) => (filter === 'all' || h.kind === filter) && (!timeRange || inRange(h, timeRange))),
-    [filter, timeRange],
-  )
+  // time travel: only what had landed by the playhead (keyed by count, so scrolling within a gap doesn't rebuild the scene)
+  const landed = until == null ? ARRIVAL_ORDER.length : arrivedCount(until)
+  const items = useMemo(() => {
+    const ok = new Set(ARRIVAL_ORDER.slice(0, landed))
+    return hardware.filter((h) => (filter === 'all' || h.kind === filter) && ok.has(h.id))
+  }, [filter, landed])
   const selected = hardware.find((h) => h.id === selectedId) ?? null
   const active = hardware.filter((h) => h.status === 'active').length
   const silent = hardware.length - active
@@ -187,7 +190,7 @@ export default function App() {
 
         {/* bottom row */}
         <section className="bottom">
-          <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} range={timeRange} onRange={setTimeRange} />
+          <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
 
           <div className="panel radar">
             <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />

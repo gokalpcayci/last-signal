@@ -1,30 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { hardware, type Hardware } from '../data/hardware'
-import { IconChevronDown } from './icons'
 
 /**
- * Bottom-left analytics panel. Two views of the same 22 objects:
- *  - signals:  one thin trace per object from arrival to last signal (1966 → now, broken axis)
- *  - arrivals: one LED dot per object, stacked by month (1966–1972), over a ghost LED grid
- * Hover = readout, click = select (camera flies), drag = time filter for the map.
+ * Bottom-left analytics panel: a side-scrolling telemetry printout, 1966 → today.
+ * Scroll (trackpad, wheel, drag, arrow keys, swipe) and a playhead slides from the left edge
+ * (1966) to the right edge (today). Behind the playhead every object is printed as text, the
+ * way a line printer would have logged it (see `buildAscii` for the character set).
+ * The playhead date also time-travels the map (App filters `items` by arrival).
+ * Nothing moves on its own; it opens scrolled to today, so the whole story is there at first.
  */
 
-export type ChartMode = 'arrivals' | 'signals'
-export interface TimeRange { mode: ChartMode; t0: number; t1: number }
-
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-const NOW = (() => { const d = new Date(); return d.getUTCFullYear() + d.getUTCMonth() / 12 + (d.getUTCDate() - 1) / 365 })()
-const NOW_YEAR = new Date().getUTCFullYear()
+export const NOW = (() => { const d = new Date(); return d.getUTCFullYear() + d.getUTCMonth() / 12 + (d.getUTCDate() - 1) / 365 })()
 
 /** ISO date → decimal year. Non-dates ("Still in use today") mean now. */
 export const toYear = (s: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
   return m ? +m[1] + (+m[2] - 1) / 12 + (+m[3] - 1) / 365 : NOW
 }
-export const inRange = (h: Hardware, r: TimeRange) => {
-  const a = toYear(h.arrived), e = toYear(h.lastSignal)
-  return r.mode === 'arrivals' ? a >= r.t0 && a <= r.t1 : a <= r.t1 && e >= r.t0
-}
+const ARR = new Map(hardware.map((h) => [h.id, toYear(h.arrived)]))
+const END = new Map(hardware.map((h) => [h.id, toYear(h.lastSignal)]))
+const byArrival = [...hardware].sort((a, b) => ARR.get(a.id)! - ARR.get(b.id)!)
+
+/** Object ids in landing order, and how many had landed by year t (for the map's time travel). */
+export const ARRIVAL_ORDER = byArrival.map((h) => h.id)
+export const arrivedCount = (t: number) => byArrival.filter((h) => ARR.get(h.id)! <= t).length
 
 const fmtT = (t: number) => {
   if (t >= NOW - 0.02) return 'NOW'
@@ -43,10 +43,9 @@ const span = (a: number, b: number) => {
 }
 const short = (mission: string) => (mission.startsWith('Surveyor') ? 'SURV' : mission.replace('Apollo ', 'A'))
 
-const byArrival = [...hardware].sort((a, b) => toYear(a.arrived) - toYear(b.arrived))
-
-// ── signals view: rows per mission, lanes inside a row ──────────────────────
-interface Row { label: string; lanes: number; items: { h: Hardware; lane: number }[] }
+// ── rows per mission, lanes inside a row ────────────────────────────────────
+interface Row { label: string; lanes: number }
+const LANE = new Map<string, { row: number; lane: number }>()
 const ROWS: Row[] = (() => {
   const groups = new Map<string, Hardware[]>()
   for (const h of byArrival) {
@@ -54,18 +53,17 @@ const ROWS: Row[] = (() => {
     if (!groups.has(k)) groups.set(k, [])
     groups.get(k)!.push(h)
   }
-  return [...groups].map(([label, hs]) => {
+  return [...groups].map(([label, hs], row) => {
     // long traces on top; short ones share a lane only when they don't overlap
-    const sorted = [...hs].sort((a, b) => toYear(b.lastSignal) - toYear(a.lastSignal))
     const lanes: [number, number][][] = []
-    const items = sorted.map((h) => {
-      const a = toYear(h.arrived), e = toYear(h.lastSignal)
+    for (const h of [...hs].sort((a, b) => END.get(b.id)! - END.get(a.id)!)) {
+      const a = ARR.get(h.id)!, e = END.get(h.id)!
       let lane = lanes.findIndex((iv) => iv.every(([s, f]) => e < s - 0.05 || a > f + 0.05))
       if (lane < 0) { lane = lanes.length; lanes.push([]) }
       lanes[lane].push([a, e])
-      return { h, lane }
-    })
-    return { label, lanes: lanes.length, items }
+      LANE.set(h.id, { row, lane })
+    }
+    return { label, lanes: lanes.length }
   })
 })()
 
@@ -77,286 +75,296 @@ const CLIFF = (() => {
   return hit ? { date: hit[0], t: toYear(hit[0]), count: hit[1] } : null
 })()
 
-// broken time axis: 1966–1978 gets most of the width, 1978–now is squeezed after a "//"
-const T0 = 1966, TB = 1978, BREAK = 0.8, GAP = 0.035
-const GUTTER = 30, AXIS = 15
+// ── narration: the latest event at or before the playhead ───────────────────
+const EVENTS: { t: number; text: string }[] = (() => {
+  const ev: { t: number; text: string }[] = []
+  const missions = new Map<string, Hardware[]>()
+  for (const h of byArrival) { if (!missions.has(h.mission)) missions.set(h.mission, []); missions.get(h.mission)!.push(h) }
+  for (const [m, hs] of missions) {
+    const t = ARR.get(hs[0].id)!
+    ev.push({ t, text: m.startsWith('Surveyor') ? `${m.toUpperCase()} LANDS` : `${m.toUpperCase()} · ${hs.length} OBJECT${hs.length > 1 ? 'S' : ''} LEFT BEHIND` })
+    if (m.startsWith('Surveyor')) ev.push({ t: END.get(hs[0].id)!, text: `${m.toUpperCase()} GOES QUIET` })
+  }
+  if (CLIFF) ev.push({ t: CLIFF.t, text: `${CLIFF.count} SCIENCE STATIONS SWITCHED OFF` })
+  const live = hardware.filter((h) => h.status === 'active').length
+  ev.push({ t: NOW - 0.01, text: `${live} STILL TALKING TODAY` })
+  return ev.sort((a, b) => a.t - b.t)
+})()
 
-// ── arrivals view: monthly columns ──────────────────────────────────────────
-const A0 = 1966, MONTHS_N = 7 * 12
-const monthIdx = (h: Hardware) => { const [y, m] = h.arrived.split('-').map(Number); return (y - A0) * 12 + m - 1 }
-// LED columns are 2 months wide: big enough dots, and no two missions share a column in this data
-const PER_COL = 2, LED_COLS = MONTHS_N / PER_COL
-const COLUMNS: Hardware[][] = Array.from({ length: LED_COLS }, () => [])
-for (const h of byArrival) COLUMNS[Math.floor(monthIdx(h) / PER_COL)]?.push(h)
-// sort each stack so active objects sit on top (they read as the "still lit" ones)
-for (const c of COLUMNS) c.sort((a, b) => (a.status === b.status ? 0 : a.status === 'active' ? 1 : -1))
+// time axis: the busy years get room, the long quiet after 1978 is squeezed 8×
+const T0 = 1966, TB = 1978, SQUEEZE = 8
+const GUTTER = 34, PAD = 10
 
-interface Hit { h: Hardware; x1: number; x2: number; y: number }
+// ── the printout ────────────────────────────────────────────────────────────
+// One text row per mission:
+//   ▪ landed   = two long traces side by side   - one   : / . the same after going silent (signal decay)
+//   × went quiet   · not recorded yet   │ playhead   ┊ the 1977 shutdown
+// Colours stay status-only: green = still talking at the playhead, orange = silent by then.
+const A_ROWS = ROWS.length + 2 // caption row + one per mission + ruler
 
-export default function SignalChart({ items, selectedId, onSelect, range, onRange }: {
+interface Run { text: string; cls: string }
+interface AsciiGrid { rows: Run[][]; cols: number }
+
+function buildAscii(o: {
+  cols: number; ch: number; p: number; atNow: boolean; headCol: number
+  x: (t: number) => number; tAt: (px: number) => number
+  visible: Set<string>; selectedId: string | null; hoverId: string | null
+}): AsciiGrid {
+  const { cols, ch, p, atNow, headCol, x, tAt, visible, selectedId, hoverId } = o
+  const colOf = (t: number) => Math.floor(x(t) / ch)
+  const t0 = (c: number) => tAt(c * ch), t1 = (c: number) => tAt((c + 1) * ch)
+  const toRuns = (chars: string[], cls: string[]) => {
+    const runs: Run[] = []
+    chars.forEach((c, i) => {
+      const last = runs[runs.length - 1]
+      if (last && last.cls === cls[i]) last.text += c
+      else runs.push({ text: c, cls: cls[i] })
+    })
+    return runs
+  }
+  const mark = (ids: string[], base: string) => {
+    let k = base
+    if (ids.length && ids.every((id) => !visible.has(id))) k += ' out'
+    if (selectedId && ids.includes(selectedId)) k += ' sel'
+    else if (hoverId && ids.includes(hoverId)) k += ' hov'
+    return k
+  }
+
+  // caption row: the 1977 cliff once passed, and the scale note after the break
+  const cap = Array<string>(cols).fill(' '), capC = Array<string>(cols).fill('')
+  const put = (txt: string, at: number, k: string) => { for (let i = 0; i < txt.length; i++) if (at + i >= 0 && at + i < cols) { cap[at + i] = txt[i]; capC[at + i] = k } }
+  put('1 TICK = 10 YEARS →', colOf(TB) + 2, 'faint')
+  if (CLIFF && p >= CLIFF.t) { const txt = `${fmtDay(CLIFF.date)} · ${CLIFF.count} STATIONS OFF `; put(txt, colOf(CLIFF.t) - txt.length, 'warn') }
+  const rows: Run[][] = [toRuns(cap, capC)]
+
+  const cliffCol = CLIFF && p >= CLIFF.t ? colOf(CLIFF.t) : -1
+  ROWS.forEach((_, ri) => {
+    const objs = byArrival.filter((h) => LANE.get(h.id)!.row === ri && ARR.get(h.id)! <= p)
+    const chars: string[] = [], cls: string[] = []
+    for (let c = 0; c < cols; c++) {
+      const a0 = t0(c), a1 = t1(c)
+      if (c > headCol) { chars.push(c % 4 === 0 ? '·' : ' '); cls.push('faint'); continue }
+      // long traces live in lanes 0 and 1; short visits (3-day landers, rovers) are just their landing mark
+      const cover = objs.filter((h) => LANE.get(h.id)!.lane <= 1 && ARR.get(h.id)! < a1 && Math.min(END.get(h.id)!, p) >= a0)
+      const land = objs.find((h) => ARR.get(h.id)! >= a0 && ARR.get(h.id)! < a1)
+      const quiet = objs.find((h) => LANE.get(h.id)!.lane <= 1 && END.get(h.id)! < p && END.get(h.id)! >= a0 && END.get(h.id)! < a1)
+      const alive = (h: Hardware) => END.get(h.id)! >= p - 1e-6
+      let g = ' ', k = 'faint', ids: string[] = []
+      if (land) { g = '▪'; k = alive(land) ? 'ok' : 'warn'; ids = [land.id] }
+      else if (quiet) { g = '×'; k = 'warn'; ids = [quiet.id] }
+      else if (cover.length) {
+        const live = cover.some(alive)
+        g = live ? (cover.length > 1 ? '=' : '-') : (cover.length > 1 ? ':' : '.')
+        k = live ? 'ok' : 'warn dim'
+        ids = cover.map((h) => h.id)
+      } else if (c === cliffCol) { g = '┊'; k = 'warn dim' }
+      if (c === headCol && !atNow) { if (g === ' ') { g = '│'; k = 'head' } else k += ' head' }
+      chars.push(g); cls.push(mark(ids, k))
+    }
+    rows.push(toRuns(chars, cls))
+  })
+
+  // ruler: ·'66·····'67·· … //·· 1980 ·· … ··NOW
+  const rul = Array<string>(cols).fill('·'), rulC = Array<string>(cols).fill('faint')
+  const label = (txt: string, at: number, k: string) => { for (let i = 0; i < txt.length; i++) if (at + i >= 0 && at + i < cols) { rul[at + i] = txt[i]; rulC[at + i] = k } }
+  for (let y = T0; y < TB; y++) label(`'${String(y).slice(2)}`, colOf(y), 'dim')
+  label('//', colOf(TB) - 1, 'dim')
+  for (const y of [1980, 1990, 2000, 2010, 2020]) if (y < NOW - 3) label(String(y), colOf(y) - 1, 'dim')
+  label('NOW', cols - 3, 'dim')
+  if (!atNow && rul[headCol] === '·') { rul[headCol] = '┴'; rulC[headCol] = 'head' } // never over a label
+  rows.push(toRuns(rul, rulC))
+  return { rows, cols }
+}
+
+export default function SignalChart({ items, selectedId, onSelect, onTime }: {
   items: Hardware[]
   selectedId: string | null
   onSelect: (id: string) => void
-  range: TimeRange | null
-  onRange: (r: TimeRange | null) => void
+  /** playhead date in decimal years, or null when it sits at today */
+  onTime: (t: number | null) => void
 }) {
-  const [mode, setMode] = useState<ChartMode>('signals')
-  const [menu, setMenu] = useState(false)
-  const boxRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const measureRef = useRef<HTMLSpanElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
-  const [hover, setHover] = useState<{ x: number; id: string | null } | null>(null)
-  const [drag, setDrag] = useState<{ x0: number; x1: number } | null>(null)
+  const [scroll, setScroll] = useState({ left: 0, max: 0 })
+  const [ch, setCh] = useState(0) // measured width of one character
+  const [hoverId, setHoverId] = useState<string | null>(null)
+  const pan = useRef<{ x: number; left: number; moved: boolean } | null>(null)
+  const opened = useRef(false)
+  const fracRef = useRef(1) // 0 = 1966 at the left edge, 1 = today at the right edge
+
+  // ── geometry: viewport, time scale, character grid ──
+  const VW = Math.max(10, size.w - GUTTER)
+  const H = size.h
+  const pxYr = Math.max(56, VW / 4) // ~4 busy years per screen
+  const pxQuiet = pxYr / SQUEEZE
+  const CW = PAD * 2 + (TB - T0) * pxYr + (NOW - TB) * pxQuiet
+  const x = (t: number) => PAD + (t <= TB ? (t - T0) * pxYr : (TB - T0) * pxYr + (t - TB) * pxQuiet)
+  const tAt = (cx: number) => {
+    const d = cx - PAD
+    if (d <= (TB - T0) * pxYr) return T0 + Math.max(0, d) / pxYr
+    return Math.min(NOW, TB + (d - (TB - T0) * pxYr) / pxQuiet)
+  }
+  // text rows fill the height; the strip is a whole number of character cells wide
+  const LH = Math.max(9, Math.min(14, Math.floor(H / A_ROWS)))
+  const FS = Math.max(8, LH - 2)
+  const cols = ch ? Math.ceil(CW / ch) : 0
+  const contentW = ch ? cols * ch : CW
+
+  useLayoutEffect(() => {
+    const measure = () => { const el = measureRef.current; if (el) setCh(el.getBoundingClientRect().width / 50) }
+    measure()
+    document.fonts?.ready.then(measure)
+  }, [FS])
+
+  // playhead slides with the scroll: left edge at the start, right edge at the end
+  const frac = scroll.max > 0 ? scroll.left / scroll.max : 1
+  const headX = scroll.left + frac * VW
+  const p = scroll.max > 0 ? tAt(headX) : NOW
+  const atNow = p >= NOW - 0.02
 
   useEffect(() => {
-    const el = boxRef.current
+    const el = scrollRef.current?.parentElement
     if (!el) return
     const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
 
+  // open at today (the full picture); on resize keep the same place in time, not the same pixel
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el || !size.w) return
+    const max = el.scrollWidth - el.clientWidth
+    el.scrollLeft = opened.current ? fracRef.current * max : max
+    opened.current = true
+    setScroll({ left: el.scrollLeft, max })
+  }, [size.w, size.h, contentW])
+
+  // tell the map; null at today so nothing is filtered
+  useEffect(() => { onTime(atNow ? null : p) }, [p, atNow, onTime])
+
+  // vertical wheel scrolls sideways (needs a non-passive listener to stop the page)
   useEffect(() => {
-    if (!menu) return
-    const close = () => setMenu(false)
-    window.addEventListener('pointerdown', close)
-    return () => window.removeEventListener('pointerdown', close)
-  }, [menu])
+    const el = scrollRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+      const max = el.scrollWidth - el.clientWidth
+      if ((e.deltaY < 0 && el.scrollLeft <= 0) || (e.deltaY > 0 && el.scrollLeft >= max)) return
+      e.preventDefault()
+      el.scrollLeft += e.deltaY
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
-  const visible = useMemo(() => new Set(items.map((h) => h.id)), [items])
-  const { w: W, h: H } = size
-  const TOP = mode === 'signals' && CLIFF ? 13 : 4 // signals: a strip on top for the cliff caption
-  const plotH = Math.max(10, H - AXIS - TOP)
-
-  // ── scales ──
-  const L = mode === 'signals' ? GUTTER : 2
-  const PW = Math.max(10, W - L - 6)
-  const x = (t: number) => mode === 'signals'
-    ? (t <= TB ? L + ((t - T0) / (TB - T0)) * BREAK * PW : L + (BREAK + GAP) * PW + ((t - TB) / (NOW - TB)) * (1 - BREAK - GAP) * PW)
-    : L + ((t - A0) * 12 / MONTHS_N) * PW
-  const tAt = (px: number) => {
-    const f = (px - L) / PW
-    if (mode === 'arrivals') return A0 + Math.max(0, Math.min(1, f)) * MONTHS_N / 12
-    if (f <= BREAK) return T0 + Math.max(0, f / BREAK) * (TB - T0)
-    if (f < BREAK + GAP) return TB
-    return TB + Math.min(1, (f - BREAK - GAP) / (1 - BREAK - GAP)) * (NOW - TB)
+  const onScroll = () => {
+    const el = scrollRef.current!
+    const max = el.scrollWidth - el.clientWidth
+    fracRef.current = max > 0 ? el.scrollLeft / max : 1
+    setScroll({ left: el.scrollLeft, max })
   }
 
-  // ── geometry for the current mode (also used for hit-testing) ──
-  const colW = PW / LED_COLS
-  const cell = Math.max(2, Math.min(colW, plotH / 5))
-  const ledRows = Math.max(4, Math.min(12, Math.floor(plotH / cell)))
-  const base = TOP + plotH
+  const visible = new Set(items.map((h) => h.id))
 
-  // 22 objects: cheap enough to rebuild every render
-  const hits: Hit[] = (() => {
-    if (!W) return []
-    if (mode === 'signals') {
-      const rowH = plotH / ROWS.length
-      return ROWS.flatMap((r, ri) => {
-        const gap = Math.min(4, rowH / (r.lanes + 1))
-        return r.items.map(({ h, lane }) => {
-          const x1 = x(toYear(h.arrived))
-          return { h, x1, x2: Math.max(x1 + 2, x(toYear(h.lastSignal))), y: TOP + ri * rowH + rowH / 2 + (lane - (r.lanes - 1) / 2) * gap }
-        })
-      })
-    }
-    return COLUMNS.flatMap((c, i) => c.map((h, k) => {
-      const cx = L + (i + 0.5) * colW
-      return { h, x1: cx, x2: cx, y: base - (k + 0.5) * cell }
-    }))
-  })()
-
-  const hitAt = (px: number, py: number): Hit | null => {
-    let best: Hit | null = null, bd = mode === 'signals' ? 7 : Math.max(5, cell)
-    for (const hit of hits) {
-      if (!visible.has(hit.h.id)) continue
-      const dx = px < hit.x1 ? hit.x1 - px : px > hit.x2 ? px - hit.x2 : 0
-      const d = Math.hypot(dx, py - hit.y)
-      if (d < bd) { bd = d; best = hit }
+  // hit-test on the text grid: rows are lines (caption first); upper half = lane 0, lower half = lane 1
+  const pick = (cx: number, cy: number): Hardware | null => {
+    const ri = Math.floor(cy / LH) - 1
+    if (!ch || ri < 0 || ri >= ROWS.length) return null
+    const half = cy % LH < LH / 2 ? 0 : 1
+    let best: Hardware | null = null, bd = 2 * ch
+    for (const h of byArrival) {
+      const { row, lane } = LANE.get(h.id)!
+      const a = ARR.get(h.id)!
+      if (row !== ri || a > p || !visible.has(h.id)) continue
+      const x1 = x(a), x2 = lane <= 1 ? x(Math.min(END.get(h.id)!, p)) : x1
+      const dx = cx < x1 ? x1 - cx : cx > x2 ? cx - x2 : 0
+      const d = dx + (lane <= 1 ? (lane === half ? 0 : ch / 2) : ch / 4)
+      if (d < bd) { bd = d; best = h }
     }
     return best
   }
 
-  // ── pointer: hover / click / drag-to-filter ──
-  const local = (e: React.PointerEvent) => { const r = boxRef.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] }
+  // ── pointer: hover readout, click selects, mouse-drag pans (touch scrolls natively) ──
+  const local = (e: React.PointerEvent) => {
+    const el = scrollRef.current!, r = el.getBoundingClientRect()
+    return [e.clientX - r.left + el.scrollLeft, e.clientY - r.top]
+  }
   const onDown = (e: React.PointerEvent) => {
-    const [px] = local(e)
-    ;(e.target as Element).setPointerCapture?.(e.pointerId)
-    setDrag({ x0: px, x1: px })
+    if (e.pointerType !== 'mouse') return
+    pan.current = { x: e.clientX, left: scrollRef.current!.scrollLeft, moved: false }
+    scrollRef.current!.setPointerCapture(e.pointerId)
   }
   const onMove = (e: React.PointerEvent) => {
-    const [px, py] = local(e)
-    if (drag) setDrag({ ...drag, x1: px })
-    setHover({ x: px, id: hitAt(px, py)?.h.id ?? null })
+    if (pan.current) {
+      const dx = e.clientX - pan.current.x
+      if (Math.abs(dx) > 4) pan.current.moved = true
+      if (pan.current.moved) { scrollRef.current!.scrollLeft = pan.current.left - dx; return }
+    }
+    const [cx, cy] = local(e)
+    setHoverId(pick(cx, cy)?.id ?? null)
   }
   const onUp = (e: React.PointerEvent) => {
-    if (!drag) return
-    const [px, py] = local(e)
-    if (Math.abs(px - drag.x0) > 5) {
-      let t0 = tAt(Math.min(drag.x0, px)), t1 = tAt(Math.max(drag.x0, px))
-      if (mode === 'arrivals') { t0 = Math.floor(t0 * 12) / 12; t1 = Math.ceil(t1 * 12) / 12 } // snap to months
-      onRange({ mode, t0, t1 })
-    } else {
-      const hit = hitAt(px, py)
-      if (hit) onSelect(hit.h.id)
-      else if (range) onRange(null)
-    }
-    setDrag(null)
+    const wasPan = pan.current?.moved
+    pan.current = null
+    if (wasPan) return
+    const [cx, cy] = local(e)
+    const hit = pick(cx, cy)
+    if (hit) onSelect(hit.id)
   }
 
-  const pickMode = (m: ChartMode) => { setMenu(false); if (m !== mode) { setMode(m); onRange(null); setHover(null) } }
-
-  // ── readout line (replaces the title while you interact) ──
-  const hovered = hover?.id ? hardware.find((h) => h.id === hover.id) : null
-  const shownRange = drag && Math.abs(drag.x1 - drag.x0) > 5
-    ? { t0: tAt(Math.min(drag.x0, drag.x1)), t1: tAt(Math.max(drag.x0, drag.x1)) }
-    : range?.mode === mode ? range : null
-  let readout: React.ReactNode = mode === 'signals' ? 'How long each one kept talking' : 'Hardware arrivals by month'
+  // ── readout line ──
+  const hovered = hoverId ? hardware.find((h) => h.id === hoverId) : null
+  const talking = hardware.filter((h) => ARR.get(h.id)! <= p && END.get(h.id)! >= p - 1e-6).length
+  const event = [...EVENTS].reverse().find((ev) => ev.t <= p)
+  let readout: React.ReactNode = (
+    <span className="sig__read">{event ? event.text : 'LISTENING FOR SIGNALS…'}<i>{talking} TALKING</i></span>
+  )
   if (hovered) {
-    const a = toYear(hovered.arrived), e = toYear(hovered.lastSignal)
+    const a = ARR.get(hovered.id)!, e = END.get(hovered.id)!
     readout = (
       <span className="sig__read">
         <b className={hovered.status === 'active' ? 'ok' : 'warn'}>{hovered.status === 'active' ? '●' : '▲'}</b>
         {hovered.mission.toUpperCase()} · {hovered.name.toUpperCase()}
-        <i>{mode === 'signals' ? `${fmtDay(hovered.arrived)} → ${fmtDay(hovered.lastSignal)} · ${span(a, e)}` : fmtDay(hovered.arrived)}</i>
+        <i>{fmtDay(hovered.arrived)} → {fmtDay(hovered.lastSignal)} · {span(a, e)}</i>
       </span>
     )
-  } else if (shownRange) {
-    const n = hardware.filter((h) => inRange(h, { mode, ...shownRange })).length
-    readout = (
-      <span className="sig__read">
-        {fmtT(shownRange.t0)} → {fmtT(shownRange.t1)}
-        <i>{n} {mode === 'signals' ? 'TALKING' : 'ARRIVED'}{range && !drag ? ' · CLICK EMPTY SPACE TO CLEAR' : ''}</i>
-      </span>
-    )
-  } else if (hover && hover.x >= L && hover.x <= L + PW) {
-    const t = tAt(hover.x)
-    if (mode === 'arrivals') {
-      const c = COLUMNS[Math.floor((hover.x - L) / colW)] ?? []
-      readout = c.length
-        ? <span className="sig__read">{fmtT(toYear(c[0].arrived))}<i>{short(c[0].mission)} · {c.length} ARRIVED</i></span>
-        : <span className="sig__read">{fmtT(t)}<i>NO ARRIVALS</i></span>
-    } else {
-      const n = hardware.filter((h) => toYear(h.arrived) <= t && toYear(h.lastSignal) >= t).length
-      readout = <span className="sig__read">{fmtT(t)}<i>{n} STILL TALKING</i></span>
-    }
   }
 
-  const dimOf = (h: Hardware) => (!visible.has(h.id) ? ' is-out' : selectedId && selectedId !== h.id ? ' is-dim' : '')
+  const grid = cols && size.w
+    ? buildAscii({ cols, ch, p, atNow, headCol: Math.floor(headX / ch), x, tAt, visible, selectedId, hoverId })
+    : null
+  const textStyle = { fontSize: FS, lineHeight: `${LH}px` }
 
   return (
     <div className="panel chart">
-      <div className="chips">
-        <span>Moon <IconChevronDown /></span>
-        <div className="chip-wrap">
-          <button className="chip" aria-haspopup="listbox" aria-expanded={menu}
-            onPointerDown={(e) => e.stopPropagation()} onClick={() => setMenu((o) => !o)}>
-            {mode === 'signals' ? `1966–${NOW_YEAR}` : '1966–1972'} <IconChevronDown />
-          </button>
-          {menu && (
-            <ul className="chip-menu" role="listbox" onPointerDown={(e) => e.stopPropagation()}>
-              <li><button role="option" aria-selected={mode === 'signals'} onClick={() => pickMode('signals')}>
-                {mode === 'signals' ? '[SIGNALS]' : 'SIGNALS'}<small>1966–{NOW_YEAR}</small></button></li>
-              <li><button role="option" aria-selected={mode === 'arrivals'} onClick={() => pickMode('arrivals')}>
-                {mode === 'arrivals' ? '[ARRIVALS]' : 'ARRIVALS'}<small>1966–1972</small></button></li>
-            </ul>
+      <div className="sig__head">
+        <div className="panel__title">{readout}</div>
+        <span className="sig__date">{fmtT(p)}</span>
+      </div>
+
+      <div className="sig">
+        {/* fixed row labels; the printout scrolls under them */}
+        <pre className="asc asc__labels" style={{ ...textStyle, width: GUTTER }} aria-hidden>
+          {['', ...ROWS.map((r) => r.label)].join('\n')}
+        </pre>
+        <span ref={measureRef} className="asc asc__measure" style={{ fontSize: FS }} aria-hidden>{'0'.repeat(50)}</span>
+
+        <div className="sig__scroll" ref={scrollRef} tabIndex={0} onScroll={onScroll}
+          role="group" aria-label="Timeline 1966 to today. Scroll sideways to move through time."
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
+          onPointerLeave={() => { if (!pan.current) setHoverId(null) }}>
+          {grid && (
+            <pre className="asc" style={{ ...textStyle, width: contentW }}>
+              {grid.rows.map((row, i) => (
+                <div key={i}>{row.map((r, j) => <span key={j} className={r.cls}>{r.text}</span>)}</div>
+              ))}
+            </pre>
           )}
         </div>
-      </div>
-      <div className="panel__title">{readout}</div>
-
-      <div className="sig" ref={boxRef}
-        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
-        onPointerLeave={() => { if (!drag) setHover(null) }}>
-        {W > 0 && (
-          <svg key={mode} className="sig__plot" width={W} height={H} role="img"
-            aria-label={mode === 'signals' ? 'Timeline of how long each object sent signals' : 'Hardware arrivals per month'}>
-            <defs>
-              <pattern id="sig-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(255,255,255,0.14)" strokeWidth="1.2" />
-              </pattern>
-            </defs>
-
-            {/* brushed range */}
-            {shownRange && (
-              <g className="sig__range">
-                <rect x={x(shownRange.t0)} y={TOP} width={Math.max(1, x(shownRange.t1) - x(shownRange.t0))} height={plotH} fill="url(#sig-hatch)" />
-                <line x1={x(shownRange.t0)} x2={x(shownRange.t0)} y1={TOP} y2={base} />
-                <line x1={x(shownRange.t1)} x2={x(shownRange.t1)} y1={TOP} y2={base} />
-              </g>
-            )}
-
-            {/* baseline + ticks */}
-            <line className="sig__base" x1={L} x2={L + PW} y1={base + 1.5} y2={base + 1.5} />
-
-            {mode === 'signals' ? (
-              <>
-                {ROWS.map((r, ri) => (
-                  <text key={r.label} className="sig__lab" x={0} y={TOP + (ri + 0.5) * (plotH / ROWS.length) + 3}>{r.label}</text>
-                ))}
-                {CLIFF && (
-                  <g className="sig__cliff">
-                    <line x1={x(CLIFF.t)} x2={x(CLIFF.t)} y1={2} y2={base} />
-                    <text x={x(CLIFF.t) - 4} y={8} textAnchor="end">{fmtDay(CLIFF.date)} · {CLIFF.count} STATIONS OFF</text>
-                  </g>
-                )}
-                {hits.map(({ h, x1, x2, y }) => {
-                  const live = h.status === 'active'
-                  return (
-                    <g key={h.id} className={`sig__trace ${live ? 'ok' : 'warn'}${dimOf(h)}${selectedId === h.id ? ' is-sel' : ''}${hover?.id === h.id ? ' is-hov' : ''}`}>
-                      <line x1={x1} x2={x2} y1={y} y2={y} />
-                      {live
-                        ? <rect className="sig__live" x={x2 - 1.5} y={y - 1.5} width={3} height={3} style={{ animationDelay: `${(x1 % 7) * 0.6}s` }} />
-                        : <rect className="sig__cap" x={x2 - 1.25} y={y - 1.25} width={2.5} height={2.5} />}
-                    </g>
-                  )
-                })}
-                {/* axis break */}
-                <g className="sig__break">
-                  <rect x={L + (BREAK + GAP / 2) * PW - 3} y={TOP} width={6} height={plotH + 4} />
-                  <line x1={L + (BREAK + GAP / 2) * PW - 4} y1={base + 5} x2={L + (BREAK + GAP / 2) * PW - 1} y2={base - 2} />
-                  <line x1={L + (BREAK + GAP / 2) * PW + 1} y1={base + 5} x2={L + (BREAK + GAP / 2) * PW + 4} y2={base - 2} />
-                </g>
-                {(x(1968) - x(1966) < 40 ? [1966, 1970, 1974] : [1966, 1968, 1970, 1972, 1974, 1976]).map((y) => (
-                  <text key={y} className="sig__tick" x={x(y)} y={H - 2} textAnchor={y === 1966 ? 'start' : 'middle'}>{y}</text>
-                ))}
-                <text className="sig__tick" x={L + PW} y={H - 2} textAnchor="end">NOW</text>
-              </>
-            ) : (
-              <>
-                {/* ghost LEDs */}
-                {COLUMNS.map((_, i) => Array.from({ length: ledRows }, (_, k) => (
-                  <rect key={`${i}-${k}`} className="sig__ghost" x={L + i * colW + (colW - cell * 0.62) / 2} y={base - (k + 1) * cell + cell * 0.19}
-                    width={cell * 0.62} height={cell * 0.62} rx={cell * 0.12} />
-                )))}
-                {hits.map(({ h, x1, y }) => (
-                  <rect key={h.id} className={`sig__led ${h.status === 'active' ? 'ok' : 'warn'}${dimOf(h)}${selectedId === h.id ? ' is-sel' : ''}${hover?.id === h.id ? ' is-hov' : ''}`}
-                    x={x1 - cell * 0.36} y={y - cell * 0.36} width={cell * 0.72} height={cell * 0.72} rx={cell * 0.14} />
-                ))}
-                {/* mission labels above each Apollo stack, one span label for the Surveyors */}
-                {(() => {
-                  let prev = -99, raised = false
-                  return COLUMNS.map((c, i) => {
-                    if (!c.length || c[0].mission.startsWith('Surveyor')) return null
-                    raised = (i - prev) * colW < 20 ? !raised : false // stagger labels that would touch
-                    prev = i
-                    return <text key={i} className="sig__lab" x={L + (i + 0.5) * colW} y={base - c.length * cell - 3 - (raised ? 9 : 0)} textAnchor="middle">{short(c[0].mission)}</text>
-                  })
-                })()}
-                <text className="sig__lab" x={x(1966.4)} y={base - 2 * cell - 3}>SURVEYOR 1–7</text>
-                {(x(1967) - x(1966) < 40 ? [1966, 1968, 1970, 1972] : [1966, 1967, 1968, 1969, 1970, 1971, 1972]).map((y) => (
-                  <text key={y} className="sig__tick" x={x(y)} y={H - 2} textAnchor={y === 1966 ? 'start' : 'middle'}>{y}</text>
-                ))}
-                <text className="sig__tick" x={L + PW} y={H - 2} textAnchor="end">1973</text>
-              </>
-            )}
-
-            {/* crosshair */}
-            {hover && !drag && hover.x >= L && hover.x <= L + PW && (
-              <line className="sig__cross" x1={hover.x} x2={hover.x} y1={TOP} y2={base} />
-            )}
-          </svg>
-        )}
+        {scroll.left > 4 && <span className="sig__hint sig__hint--l" aria-hidden>◀</span>}
+        {scroll.left < scroll.max - 4 && <span className="sig__hint sig__hint--r" aria-hidden>▶</span>}
       </div>
     </div>
   )
