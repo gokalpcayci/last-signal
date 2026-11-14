@@ -4,11 +4,11 @@ import type { Hardware } from './hardware'
 // lat: planetocentric degrees north; lon: degrees east, wrapped to −180…180
 // (Mars maps usually quote 0…360 °E — subtract 360 above 180).
 // `year` = year it reached Mars.
-// Pathfinder/Sojourner, Phoenix and InSight use refined post-landing positions;
-// NSSDC / science.nasa.gov list rounder nominal values (19.33 N 33.55 W,
-// 68.15 N 125.9 W, ~4.5 N 135.9 E). Spirit, Opportunity, Curiosity,
-// Perseverance, Ingenuity and Three Forks coordinates are not yet checked
-// against a NASA page. Ingenuity lastSignal = official mission end.
+// Landing sites match NASA GISS Mars24 (giss.nasa.gov/tools/mars24/help/landers.html);
+// NSSDC lists pre-landing nominal targets for some (e.g. Pathfinder 19.33 N 33.55 W).
+// Ingenuity and Three Forks have no published NASA coordinates: approximate
+// positions near Perseverance's landing site. Ingenuity lastSignal = final
+// downlink NASA documented (mission ended 2024-01-25).
 
 const NSSDC = 'https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id='
 
@@ -26,7 +26,7 @@ export const marsHardware: Hardware[] = [
     id: 'viking-2', name: 'Viking 2 Lander', mission: 'Viking 2', kind: 'robot', status: 'silent',
     lat: 47.67, lon: 134.28, year: 1976, site: 'Utopia Planitia',
     arrived: '1976-09-03', lastSignal: '1980-04-11',
-    story: 'Viking 2 landed on a flat, rocky plain much farther north than its twin. Its cameras watched the seasons change for almost four Mars winters.',
+    story: 'Viking 2 landed on a flat, rocky plain much farther north than its twin. Its cameras watched the seasons change through two Martian winters.',
     didYouKnow: 'It photographed a thin layer of frost on the ground around it.',
     source: NSSDC + '1975-083C',
   },
@@ -45,7 +45,7 @@ export const marsHardware: Hardware[] = [
     lat: 19.13, lon: -33.22, year: 1997, site: 'Ares Vallis',
     arrived: '1997-07-04', lastSignal: '1997-09-27',
     story: 'The first wheeled rover on another planet — about the size of a microwave oven. It drove slowly from rock to rock, sniffing out what each one was made of.',
-    didYouKnow: 'It could only talk to Earth through the lander, so when the lander went quiet, Sojourner went quiet too.',
+    didYouKnow: 'It talked to Earth through the lander, so when the lander went quiet, Sojourner went quiet too.',
     source: 'https://science.nasa.gov/mission/mars-pathfinder/',
   },
 
@@ -54,7 +54,7 @@ export const marsHardware: Hardware[] = [
     id: 'spirit', name: 'Spirit', mission: 'Mars Exploration Rover A', kind: 'rover', status: 'silent',
     lat: -14.57, lon: 175.48, year: 2004, site: 'Gusev Crater',
     arrived: '2004-01-04', lastSignal: '2010-03-22',
-    story: 'Spirit explored a giant crater that may once have held a lake. Even with a broken wheel, it kept going by driving backwards and dragging the bad wheel behind it.',
+    story: 'Spirit explored a giant crater that may once have held a lake. Even with a broken wheel, it kept going, dragging the stuck wheel along.',
     didYouKnow: 'The stuck wheel scraped up bright white soil — proof that hot water once flowed there.',
     source: 'https://science.nasa.gov/mission/mars-exploration-rovers-spirit-and-opportunity/',
   },
@@ -73,7 +73,7 @@ export const marsHardware: Hardware[] = [
     lat: 68.22, lon: -125.75, year: 2008, site: 'Vastitas Borealis',
     arrived: '2008-05-25', lastSignal: '2008-11-02',
     story: 'Phoenix landed in the icy far north of Mars and dug with a robotic arm. White bits in its trench slowly disappeared over a few days — water ice turning straight into vapor.',
-    didYouKnow: 'The long, dark polar winter buried it in frost, and it never woke up again.',
+    didYouKnow: 'As the long polar winter set in, its solar panels ran out of sunlight, and it was never heard from again.',
     source: NSSDC + '2007-034A',
   },
 
@@ -109,7 +109,7 @@ export const marsHardware: Hardware[] = [
   {
     id: 'ingenuity', name: 'Ingenuity', mission: 'Mars 2020', kind: 'helicopter', status: 'silent',
     lat: 18.47, lon: 77.39, year: 2021, site: 'Jezero Crater',
-    arrived: '2021-02-18', lastSignal: '2024-01-25',
+    arrived: '2021-02-18', lastSignal: '2024-04-16',
     story: 'A tiny helicopter that rode to Mars under Perseverance’s belly. It was planned to fly 5 times — it flew 72 times, until a damaged rotor blade grounded it for good.',
     didYouKnow: 'It was the first aircraft to make a powered, controlled flight on another planet.',
     source: 'https://science.nasa.gov/mission/mars-2020-perseverance/ingenuity-mars-helicopter/',
