@@ -12,6 +12,8 @@ import {
 } from './ui/icons'
 import NavEdge from './ui/NavEdge'
 import { LedLogo } from './ui/LedLogo'
+import BootLoader from './ui/BootLoader'
+import { introPlays } from './boot'
 import SignalChart, { ARRIVAL_ORDER, arrivedCount } from './ui/SignalChart'
 import StrandedGame from './ui/StrandedGame'
 import { exaggeration, setPlanet } from './scene/terrain'
@@ -114,6 +116,7 @@ export default function App() {
 
   return (
     <div className="page">
+      {introPlays && <BootLoader />}
       <div className="frame">
 
         {/* coordinate grid */}

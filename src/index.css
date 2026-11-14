@@ -325,6 +325,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .globe__maria circle { fill: var(--gold); opacity: 0.4; }
 
 /* ── boot-up: markers ping in one by one (delay set per marker, landing order) ── */
+.markers.is-waiting .marker { visibility: hidden; }
 .markers.is-booting .marker { animation: marker-in .5s cubic-bezier(.2,.9,.3,1.3) both; animation-delay: var(--ping-delay, 0s); }
 .marker__ping { position: absolute; inset: -1px; border: 1px solid currentColor; pointer-events: none; opacity: 0; }
 .marker--active .marker__ping { color: var(--ok); }
@@ -376,3 +377,51 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .lava p { margin-top: 8px; font-size: 11.5px; line-height: 1.45; color: #cfcfc6; }
 /* phones: keep the map visible — level + slider only */
 @media (max-width: 760px) { .lava p { display: none; } .lava { padding: 8px 10px; } }
+
+/* ── page-open loader: signal acquisition (src/ui/BootLoader.tsx) ── */
+html.booting .nav .logo { visibility: hidden; }
+.boot { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+  background: var(--bg); cursor: default; transition: background-color .75s ease; }
+.boot--fly { background-color: rgba(13, 14, 13, 0); pointer-events: none; }
+.boot__center { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 0 16px; }
+.boot__logo { display: block; will-change: transform; }
+.boot__fade { display: flex; flex-direction: column; align-items: center; transition: opacity .3s ease; }
+.boot--fly .boot__fade { opacity: 0; }
+
+/* 22 LEDs in landing order: ghost → white flash → status colour */
+.boot__wake { display: flex; gap: 4px; }
+.boot__dot { width: 6px; height: 6px; border-radius: 1.5px; background: var(--text); opacity: .07;
+  animation: boot-dot .7s ease-out both; }
+.boot__dot--active { --c: var(--ok); }
+.boot__dot--silent { --c: var(--warn); }
+@keyframes boot-dot {
+  0% { opacity: .07; background: var(--text); box-shadow: none; }
+  12% { opacity: 1; background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, .55); }
+  45% { opacity: 1; background: var(--c); box-shadow: 0 0 5px var(--c); }
+  100% { opacity: .9; background: var(--c); box-shadow: none; }
+}
+.boot__years { display: flex; justify-content: space-between; width: 100%; margin-top: 6px;
+  font: 9px var(--mono); color: var(--dim); letter-spacing: .08em; }
+
+/* typed mission-control log (fixed height so nothing jumps while lines arrive) */
+.boot__log { margin-top: 18px; min-height: calc(5 * 1.7em); width: 44ch; max-width: calc(100vw - 32px);
+  font: 11px/1.7 var(--mono); color: var(--text); font-variant-ligatures: none; }
+.boot__line { display: block; width: calc(var(--n, 40) * 1ch); max-width: 100%; overflow: hidden; white-space: pre;
+  animation: boot-type calc(var(--n, 40) * 16ms) steps(var(--n, 40), end) both; }
+.boot__line i { font-style: normal; color: var(--dim); }
+.boot__line .ok { font-weight: 400; color: var(--ok); }
+.boot__line .warn { font-weight: 400; color: var(--warn); }
+@keyframes boot-type { from { width: 0; } }
+.boot__cursor { color: var(--ok); animation: boot-blink .9s steps(2, start) infinite; }
+@keyframes boot-blink { to { visibility: hidden; } }
+
+.boot__skip { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center;
+  font: 9px var(--mono); color: var(--faint); letter-spacing: .12em; }
+@media (hover: none) { .boot__skip { display: none; } }
+
+.boot--still .boot__dot { animation: none; opacity: .9; background: var(--c); }
+.boot--still .boot__line, .boot--still .boot__cursor { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .boot__dot { animation: none; opacity: .9; background: var(--c); }
+  .boot__line, .boot__cursor { animation: none; }
+}

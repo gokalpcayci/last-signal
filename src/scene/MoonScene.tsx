@@ -11,6 +11,7 @@ import type { Hardware } from '../data/hardware'
 import { features, marsFeatures } from '../data/features'
 import { STACKED_QUERY } from '../layout'
 import { FeatureProjector, LaserBeams, Traverses } from './overlays'
+import { isBooted, markProgress, markSceneReady, useBooted } from '../boot'
 
 interface Props {
   items: Hardware[]
@@ -129,7 +130,9 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
     }
     const m = matRef.current
     if (!m) return
+    markSceneReady()   // first frame drawn (shaders compiled): the page loader may hand off
     if (skip) { m.uniforms.uReveal.value = REVEAL_MAX; return }
+    if (!isBooted()) { m.uniforms.uReveal.value = 0; return }   // wait behind the loader
     start.current ??= clock.elapsedTime
     const t = Math.min(1, (clock.elapsedTime - start.current) / BOOT_GRID_S)
     m.uniforms.uReveal.value = REVEAL_MAX * (1 - Math.pow(1 - t, 3))
@@ -294,7 +297,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
   const [dem, setDem] = useState<Dem | null>(null)
   useEffect(() => {
     let alive = true
-    loadDem().then((d) => { if (alive) setDem(d) }, (e) => console.error(`Failed to load elevation data for ${planet.label}`, e))
+    loadDem().then((d) => { markProgress(0.85); if (alive) setDem(d) }, (e) => console.error(`Failed to load elevation data for ${planet.label}`, e))
     return () => { alive = false }
   }, [planet])
   const positions = useMemo(
@@ -331,11 +334,12 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
   }, [items])
   // Poles appear with the first markers, once the grid has mostly grown in.
   const [polesOn, setPolesOn] = useState(false)
+  const booted = useBooted()
   useEffect(() => {
-    if (!dem) return
+    if (!dem || !booted) return
     const t = setTimeout(() => setPolesOn(true), reducedMotion() ? 0 : BOOT_MARKERS_START_S * 1000)
     return () => clearTimeout(t)
-  }, [dem])
+  }, [dem, booted])
 
   return (
     <div className="moon">
@@ -369,7 +373,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
         ))}
       </div>
 
-      <div className={`markers${dem ? ' is-booting' : ''}`}>
+      <div className={`markers${dem ? (booted ? ' is-booting' : ' is-waiting') : ''}`}>
         {items.map((h) => (
           <button
             key={h.id}
