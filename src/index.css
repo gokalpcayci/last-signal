@@ -80,14 +80,18 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 /* ── markers (HTML on 3D) ─────────────────── */
 /* The brand inkblot is the pin, tinted by status (green = still working, orange = silent). */
-.marker { display: grid; place-items: center; padding: 3px 2px; }
+.marker { display: grid; place-items: end center; padding: 3px 2px; } /* glyph sits on the button's bottom = the stem top */
 .marker--active { color: var(--ok); }
 .marker--silent { color: var(--warn); }
 .marker.is-selected { color: var(--text); }
-.marker__ink { display: block; width: 30px; height: 18px; background: currentColor;
+/* Size follows the MAP, not the device: --mk is relative to the map container (cq units),
+   and --mk-s is a per-marker depth scale set by the projector. The glyph scales from its
+   bottom so it stays on its stem; the button (hit area, hover label) doesn't scale. */
+.marker__ink { display: block; width: var(--mk); height: calc(var(--mk) * 0.6); background: currentColor;
   -webkit-mask: url(/brand/mark-flat.svg) center / contain no-repeat; mask: url(/brand/mark-flat.svg) center / contain no-repeat;
-  filter: drop-shadow(0 1px 0 rgba(0,0,0,.6)); transition: transform .15s; }
-.marker:hover .marker__ink, .marker.is-selected .marker__ink { transform: scale(1.25); }
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,.6)); transition: transform .15s;
+  transform: scale(var(--mk-s, 1)); transform-origin: 50% 100%; }
+.marker:hover .marker__ink, .marker.is-selected .marker__ink { transform: scale(calc(var(--mk-s, 1) * 1.25)); }
 
 /* ── right column ─────────────────────────── */
 .right { position: absolute; z-index: 10; right: 14px; top: calc(22px + (100% - 36px) * 0.3);
@@ -219,13 +223,16 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .game__go { color: var(--ok) !important; }
 .game__step { margin-left: auto; font: 9px var(--mono); letter-spacing: .08em; color: var(--dim); }
 
-.moon { position: absolute; inset: 0; }
+.moon { position: absolute; inset: 0; container-type: size;
+  /* marker glyph width: ~4.5% of the map's width (or 7% of its height), 16–30 px */
+  --mk: clamp(16px, min(4.5cqw, 7cqh), 30px); }
 .markers { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .markers .marker { position: absolute; top: 0; left: 0; pointer-events: auto; }
 
 /* ── touch: bigger hit targets ──────────────── */
 @media (pointer: coarse) {
-  .marker { padding: 8px 6px; } /* bigger hit target, same mark size */
+  /* the glyph may be small, but the tap area never drops below 32 px */
+  .marker { padding: 6px 6px 3px; min-width: 32px; min-height: 32px; }
   .toolbar button { width: 46px; height: 40px; }
 }
 

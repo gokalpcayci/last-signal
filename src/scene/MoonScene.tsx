@@ -24,6 +24,14 @@ interface Props {
 
 type Vec3 = [number, number, number]
 const MARKER_LIFT = 1.4
+/**
+ * Depth scaling for the marker glyphs: 1× at this camera distance (world units). The desktop
+ * overview (~77) lands near 0.9×, the phone top-down view (~92) ~0.75×, a fly-to (~23) 1.1×. Clamped so far
+ * marks stay readable and near ones never balloon.
+ */
+const MARKER_REF_DIST = 70
+const MARKER_SCALE_MIN = 0.7
+const MARKER_SCALE_MAX = 1.1
 const BG = "#0d0e0d"
 const FOG_NEAR = 60
 const FOG_FAR = 175
@@ -186,6 +194,7 @@ function Projector({ dem, positions, els }: {
 }) {
   const { camera, size } = useThree()
   const v = useMemo(() => new THREE.Vector3(), [])
+  const lastScale = useRef(new Map<string, string>())
   useFrame(() => {
     // CameraControls moves the camera (priority −1) but doesn't refresh its matrices — three.js
     // only does that inside render(). Without this, markers use last frame's view and lag behind.
@@ -193,7 +202,11 @@ function Projector({ dem, positions, els }: {
     for (const [id, p] of positions) {
       const el = els.current.get(id)
       if (!el) continue
-      v.set(p[0], dem.heightAt(p[0], p[2]) + MARKER_LIFT, p[2]).project(camera)
+      v.set(p[0], dem.heightAt(p[0], p[2]) + MARKER_LIFT, p[2])
+      // glyph scale by camera distance (--mk-s, used by .marker__ink); only touch the DOM on change
+      const s = THREE.MathUtils.clamp(MARKER_REF_DIST / camera.position.distanceTo(v), MARKER_SCALE_MIN, MARKER_SCALE_MAX).toFixed(2)
+      if (lastScale.current.get(id) !== s) { el.style.setProperty('--mk-s', s); lastScale.current.set(id, s) }
+      v.project(camera)
       const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1
       el.style.display = visible ? '' : 'none'
       if (visible) {
