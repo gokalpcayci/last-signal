@@ -248,7 +248,7 @@ export default function App() {
 
         {/* bottom row */}
         <section className="bottom">
-          <StrandedGame key={planet} planet={planet} onSelect={setSelectedId} />
+          <StrandedGame key={`stranded-${planet}`} planet={planet} onSelect={setSelectedId} />
 
           <div className="panel radar">
             <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />
@@ -259,7 +259,7 @@ export default function App() {
             </div>
           </div>
 
-          <SignalChart key={planet} planet={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
+          <SignalChart key={`chart-${planet}`} planet={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
         </section>
       </div>
     </div>
