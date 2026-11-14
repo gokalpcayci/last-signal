@@ -1,8 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { hardware, type Hardware } from '../data/hardware'
+import { marsHardware } from '../data/mars'
+import type { PlanetId } from '../scene/planets'
 
 /**
- * Bottom-left analytics panel: a side-scrolling telemetry printout, 1966 → today.
+ * Bottom-right analytics panel: a side-scrolling telemetry printout, 1966 → today
+ * (Mars: 1976 → today; one timeline per body, see TIMELINES).
  * Scroll (trackpad, wheel, drag, arrow keys, swipe) and a playhead slides from the left edge
  * (1966) to the right edge (today). Behind the playhead every object is printed as text, the
  * way a line printer would have logged it (see `buildAscii` for the character set).
@@ -18,14 +21,6 @@ export const toYear = (s: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
   return m ? +m[1] + (+m[2] - 1) / 12 + (+m[3] - 1) / 365 : NOW
 }
-const ARR = new Map(hardware.map((h) => [h.id, toYear(h.arrived)]))
-const END = new Map(hardware.map((h) => [h.id, toYear(h.lastSignal)]))
-const byArrival = [...hardware].sort((a, b) => ARR.get(a.id)! - ARR.get(b.id)!)
-
-/** Object ids in landing order, and how many had landed by year t (for the map's time travel). */
-export const ARRIVAL_ORDER = byArrival.map((h) => h.id)
-export const arrivedCount = (t: number) => byArrival.filter((h) => ARR.get(h.id)! <= t).length
-
 const fmtT = (t: number) => {
   if (t >= NOW - 0.02) return 'NOW'
   const y = Math.floor(t)
@@ -41,22 +36,91 @@ const span = (a: number, b: number) => {
   if (d < 1) return `${Math.round(d * 12)} MO`
   return `${d.toFixed(1)} YRS`
 }
-const short = (mission: string) => (mission.startsWith('Surveyor') ? 'SURV' : mission.replace('Apollo ', 'A'))
 
-// ── rows per mission, lanes inside a row ────────────────────────────────────
 interface Row { label: string; lanes: number }
-const LANE = new Map<string, { row: number; lane: number }>()
-const ROWS: Row[] = (() => {
+interface Ev { t: number; text: string }
+interface Tick { text: string; t: number; dx: number }
+
+/** What differs between bodies: the time axis, row labels and how events are narrated. */
+interface TimelineCfg {
+  /** axis start; the years up to `tb` get full width, after it they're squeezed `squeeze`× */
+  t0: number; tb: number; squeeze: number
+  /** busy years shown per screen width */
+  yearsPerScreen: number
+  short: (mission: string) => string
+  /** caption-row mark for a mission's first landing, or null */
+  mark: (mission: string) => string | null
+  /** narration for each mission: landing (+ later arrivals / going quiet) */
+  missionEvents: (mission: string, hs: Hardware[], ARR: Map<string, number>, END: Map<string, number>) => Ev[]
+  ruler: Tick[]
+}
+
+const yr2 = (y: number) => `'${String(y).slice(2)}`
+const UP = (s: string) => s.toUpperCase()
+
+const MOON_CFG: TimelineCfg = {
+  // the busy Apollo years get room, the long quiet after 1978 is squeezed 8×
+  t0: 1966, tb: 1978, squeeze: 8, yearsPerScreen: 4,
+  short: (m) => (m.startsWith('Surveyor') ? 'SURV' : m.replace('Apollo ', 'A')),
+  mark: (m) => (m.startsWith('Apollo') ? m.replace('Apollo ', 'A') : m === 'Surveyor 1' ? 'SURVEYORS' : null),
+  missionEvents: (m, hs, ARR, END) => {
+    const t = ARR.get(hs[0].id)!
+    const ev = [{ t, text: m.startsWith('Surveyor') ? `${UP(m)} LANDS` : `${UP(m)} · ${hs.length} OBJECT${hs.length > 1 ? 'S' : ''} LEFT BEHIND` }]
+    if (m.startsWith('Surveyor')) ev.push({ t: END.get(hs[0].id)!, text: `${UP(m)} GOES QUIET` })
+    return ev
+  },
+  ruler: [
+    ...Array.from({ length: 1978 - 1966 }, (_, i) => ({ text: yr2(1966 + i), t: 1966 + i, dx: 0 })),
+    { text: '//', t: 1978, dx: -1 },
+    ...[1980, 1990, 2000, 2010, 2020].filter((y) => y < NOW - 3).map((y) => ({ text: String(y), t: y, dx: -1 })),
+  ],
+}
+
+const MARS_SHORT: Record<string, string> = {
+  'Viking 1': 'VK1', 'Viking 2': 'VK2', 'Mars Pathfinder': 'MPF',
+  'Mars Exploration Rover A': 'SPRT', 'Mars Exploration Rover B': 'OPPY', Phoenix: 'PHX',
+  'Mars Science Laboratory': 'MSL', InSight: 'INSI', 'Mars 2020': 'M20',
+}
+const names = (hs: Hardware[]) => hs.map((h) => UP(h.name)).join(' + ')
+const MARS_CFG: TimelineCfg = {
+  // missions are spread evenly over 50 years: one plain linear axis, no squeeze
+  t0: 1976, tb: NOW, squeeze: 1, yearsPerScreen: 14,
+  short: (m) => MARS_SHORT[m] ?? UP(m).slice(0, 4),
+  mark: (m) => MARS_SHORT[m] ?? null,
+  missionEvents: (_m, hs, ARR, END) => {
+    const t = ARR.get(hs[0].id)!
+    const first = hs.filter((h) => ARR.get(h.id)! - t < 0.01)
+    const ev: Ev[] = [{ t, text: `${names(first)} LAND${first.length > 1 ? '' : 'S'}` }]
+    // later arrivals, e.g. the sample depot dropped two years after landing
+    for (const h of hs) if (!first.includes(h)) ev.push({ t: ARR.get(h.id)!, text: `${UP(h.name)} LEFT BEHIND` })
+    // going quiet: objects that fell silent on the same day share one line
+    const quiet = new Map<string, Hardware[]>()
+    for (const h of hs) if (h.status === 'silent') quiet.set(h.lastSignal, [...(quiet.get(h.lastSignal) ?? []), h])
+    for (const g of quiet.values()) ev.push({ t: END.get(g[0].id)!, text: `${names(g)} GO${g.length > 1 ? '' : 'ES'} QUIET` })
+    return ev
+  },
+  ruler: Array.from({ length: Math.floor((NOW - 3 - 1976) / 4) + 1 }, (_, i) => ({ text: yr2(1976 + i * 4), t: 1976 + i * 4, dx: 0 })),
+}
+
+function makeTimeline(list: Hardware[], cfg: TimelineCfg) {
+  const ARR = new Map(list.map((h) => [h.id, toYear(h.arrived)]))
+  const END = new Map(list.map((h) => [h.id, toYear(h.lastSignal)]))
+  const byArrival = [...list].sort((a, b) => ARR.get(a.id)! - ARR.get(b.id)!)
+
+  // ── rows per mission, lanes inside a row ──
+  const LANE = new Map<string, { row: number; lane: number }>()
   const groups = new Map<string, Hardware[]>()
   for (const h of byArrival) {
-    const k = short(h.mission)
+    const k = cfg.short(h.mission)
     if (!groups.has(k)) groups.set(k, [])
     groups.get(k)!.push(h)
   }
-  return [...groups].map(([label, hs], row) => {
-    // long traces on top; short ones share a lane only when they don't overlap
+  const ROWS: Row[] = [...groups].map(([label, hs], row) => {
+    // long traces on top; short ones share a lane only when they don't overlap. A passive cache
+    // that never transmits (Mars sample depot) goes last, so real signal traces get lanes 0–1.
+    const passive = (h: Hardware) => h.kind === 'science' && h.status === 'active'
     const lanes: [number, number][][] = []
-    for (const h of [...hs].sort((a, b) => END.get(b.id)! - END.get(a.id)!)) {
+    for (const h of [...hs].sort((a, b) => +passive(a) - +passive(b) || END.get(b.id)! - END.get(a.id)!)) {
       const a = ARR.get(h.id)!, e = END.get(h.id)!
       let lane = lanes.findIndex((iv) => iv.every(([s, f]) => e < s - 0.05 || a > f + 0.05))
       if (lane < 0) { lane = lanes.length; lanes.push([]) }
@@ -65,46 +129,44 @@ const ROWS: Row[] = (() => {
     }
     return { label, lanes: lanes.length }
   })
-})()
 
-/** A date when ≥3 objects went quiet together (the 1977 ALSEP shutdown). */
-const CLIFF = (() => {
-  const n = new Map<string, number>()
-  for (const h of hardware) if (/^\d{4}-/.test(h.lastSignal)) n.set(h.lastSignal, (n.get(h.lastSignal) ?? 0) + 1)
-  const hit = [...n].find(([, c]) => c >= 3)
-  return hit ? { date: hit[0], t: toYear(hit[0]), count: hit[1] } : null
-})()
+  /** A date when ≥3 objects went quiet together (the Moon's 1977 ALSEP shutdown). */
+  const CLIFF = (() => {
+    const n = new Map<string, number>()
+    for (const h of list) if (/^\d{4}-/.test(h.lastSignal)) n.set(h.lastSignal, (n.get(h.lastSignal) ?? 0) + 1)
+    const hit = [...n].find(([, c]) => c >= 3)
+    return hit ? { date: hit[0], t: toYear(hit[0]), count: hit[1] } : null
+  })()
 
-// ── event marks for the caption row: each Apollo landing, and the first Surveyor ──
-const MISSION_MARKS: { t: number; label: string }[] = (() => {
-  const seen = new Set<string>(), out: { t: number; label: string }[] = []
-  for (const h of byArrival) {
-    if (seen.has(h.mission)) continue
-    seen.add(h.mission)
-    if (h.mission.startsWith('Apollo')) out.push({ t: ARR.get(h.id)!, label: short(h.mission) })
-    else if (h.mission === 'Surveyor 1') out.push({ t: ARR.get(h.id)!, label: 'SURVEYORS' })
-  }
-  return out
-})()
-
-// ── narration: the latest event at or before the playhead ───────────────────
-const EVENTS: { t: number; text: string }[] = (() => {
-  const ev: { t: number; text: string }[] = []
+  // ── event marks for the caption row, and narration (latest event at or before the playhead) ──
+  const MISSION_MARKS: { t: number; label: string }[] = []
   const missions = new Map<string, Hardware[]>()
   for (const h of byArrival) { if (!missions.has(h.mission)) missions.set(h.mission, []); missions.get(h.mission)!.push(h) }
+  const ev: Ev[] = []
   for (const [m, hs] of missions) {
-    const t = ARR.get(hs[0].id)!
-    ev.push({ t, text: m.startsWith('Surveyor') ? `${m.toUpperCase()} LANDS` : `${m.toUpperCase()} · ${hs.length} OBJECT${hs.length > 1 ? 'S' : ''} LEFT BEHIND` })
-    if (m.startsWith('Surveyor')) ev.push({ t: END.get(hs[0].id)!, text: `${m.toUpperCase()} GOES QUIET` })
+    const label = cfg.mark(m)
+    if (label) MISSION_MARKS.push({ t: ARR.get(hs[0].id)!, label })
+    ev.push(...cfg.missionEvents(m, hs, ARR, END))
   }
   if (CLIFF) ev.push({ t: CLIFF.t, text: `${CLIFF.count} SCIENCE STATIONS SWITCHED OFF` })
-  const live = hardware.filter((h) => h.status === 'active').length
+  const live = list.filter((h) => h.status === 'active').length
   ev.push({ t: NOW - 0.01, text: `${live} STILL TALKING TODAY` })
-  return ev.sort((a, b) => a.t - b.t)
-})()
+  const EVENTS = ev.sort((a, b) => a.t - b.t)
 
-// time axis: the busy years get room, the long quiet after 1978 is squeezed 8×
-const T0 = 1966, TB = 1978, SQUEEZE = 8
+  return {
+    list, cfg, ARR, END, byArrival, LANE, ROWS, CLIFF, MISSION_MARKS, EVENTS,
+    /** Object ids in landing order, and how many had landed by year t (for the map's time travel). */
+    order: byArrival.map((h) => h.id),
+    arrivedCount: (t: number) => byArrival.filter((h) => ARR.get(h.id)! <= t).length,
+  }
+}
+type Timeline = ReturnType<typeof makeTimeline>
+
+export const TIMELINES: Record<PlanetId, Timeline> = {
+  moon: makeTimeline(hardware, MOON_CFG),
+  mars: makeTimeline(marsHardware, MARS_CFG),
+}
+
 const GUTTER = 34, PAD = 10
 
 // ── the printout ────────────────────────────────────────────────────────────
@@ -114,19 +176,19 @@ const GUTTER = 34, PAD = 10
 //   · not recorded yet   ▌/│ print head   ┊ the 1977 shutdown   ▼ events, printed once passed
 // Fresh ink: the few columns just behind the print head print brighter.
 // Colours stay status-only: green = still talking at the playhead, orange = silent by then.
-const A_ROWS = ROWS.length + 2 // caption row + one per mission + ruler (the overview bar sits below, outside)
 const GLOW = [1, 2, 4, 7, 11, 16, 22] // afterglow dots: columns after an object went quiet, thinning out
 const INK = 5 // columns of fresh ink behind the print head
 
 interface Run { text: string; cls: string }
 interface AsciiGrid { rows: Run[][]; cols: number }
 
-function buildAscii(o: {
+function buildAscii(tl: Timeline, o: {
   cols: number; ch: number; p: number; atNow: boolean; headCol: number
   x: (t: number) => number; tAt: (px: number) => number
   visible: Set<string>; selectedId: string | null; hoverId: string | null
 }): AsciiGrid {
   const { cols, ch, p, atNow, headCol, x, tAt, visible, selectedId, hoverId } = o
+  const { ARR, END, byArrival, LANE, ROWS, CLIFF, MISSION_MARKS, cfg } = tl
   const colOf = (t: number) => Math.floor(x(t) / ch)
   const t0 = (c: number) => tAt(c * ch), t1 = (c: number) => tAt((c + 1) * ch)
   const toRuns = (chars: string[], cls: string[]) => {
@@ -157,7 +219,7 @@ function buildAscii(o: {
   if (CLIFF && p >= CLIFF.t) { const txt = `${fmtDay(CLIFF.date)} · ${CLIFF.count} STATIONS OFF ▼`; put(txt, colOf(CLIFF.t) - txt.length + 1, 'warn') }
   if (atNow) put('TODAY ▼', cols - 7, 'ok')
   for (const m of MISSION_MARKS) if (m.t <= p) put(`▼${m.label}`, colOf(m.t), 'dim') || put('▼', colOf(m.t), 'dim')
-  put('1 TICK = 10 YEARS →', colOf(TB) + 2, 'faint')
+  if (cfg.squeeze > 1) put('1 TICK = 10 YEARS →', colOf(cfg.tb) + 2, 'faint')
   const rows: Run[][] = [toRuns(cap, capC)]
 
   const cliffCol = CLIFF && p >= CLIFF.t ? colOf(CLIFF.t) : -1
@@ -202,16 +264,16 @@ function buildAscii(o: {
   // ruler: ·'66·····'67·· … //·· 1980 ·· … ··NOW
   const rul = Array<string>(cols).fill('·'), rulC = Array<string>(cols).fill('faint')
   const label = (txt: string, at: number, k: string) => { for (let i = 0; i < txt.length; i++) if (at + i >= 0 && at + i < cols) { rul[at + i] = txt[i]; rulC[at + i] = k } }
-  for (let y = T0; y < TB; y++) label(`'${String(y).slice(2)}`, colOf(y), 'dim')
-  label('//', colOf(TB) - 1, 'dim')
-  for (const y of [1980, 1990, 2000, 2010, 2020]) if (y < NOW - 3) label(String(y), colOf(y) - 1, 'dim')
+  for (const tk of cfg.ruler) label(tk.text, colOf(tk.t) + tk.dx, 'dim')
   label('NOW', cols - 3, 'dim')
   if (!atNow && rul[headCol] === '·') { rul[headCol] = '┴'; rulC[headCol] = 'head' } // never over a label
   rows.push(toRuns(rul, rulC))
   return { rows, cols }
 }
 
-export default function SignalChart({ items, selectedId, onSelect, onTime }: {
+/** Key by planet: scroll position and measurements belong to one timeline. */
+export default function SignalChart({ planet, items, selectedId, onSelect, onTime }: {
+  planet: PlanetId
   items: Hardware[]
   selectedId: string | null
   onSelect: (id: string) => void
@@ -226,12 +288,16 @@ export default function SignalChart({ items, selectedId, onSelect, onTime }: {
   const [hoverId, setHoverId] = useState<string | null>(null)
   const pan = useRef<{ x: number; left: number; moved: boolean } | null>(null)
   const opened = useRef(false)
-  const fracRef = useRef(1) // 0 = 1966 at the left edge, 1 = today at the right edge
+  const fracRef = useRef(1) // 0 = axis start at the left edge, 1 = today at the right edge
+  const tl = TIMELINES[planet]
+  const { ARR, END, byArrival, LANE, ROWS, EVENTS, list } = tl
+  const { t0: T0, tb: TB, squeeze: SQUEEZE } = tl.cfg
+  const A_ROWS = ROWS.length + 2 // caption row + one per mission + ruler (the overview bar sits below, outside)
 
   // ── geometry: viewport, time scale, character grid ──
   const VW = Math.max(10, size.w - GUTTER)
   const H = size.h
-  const pxYr = Math.max(56, VW / 4) // ~4 busy years per screen
+  const pxYr = Math.max(56 / (tl.cfg.yearsPerScreen / 4), VW / tl.cfg.yearsPerScreen)
   const pxQuiet = pxYr / SQUEEZE
   const CW = PAD * 2 + (TB - T0) * pxYr + (NOW - TB) * pxQuiet
   const x = (t: number) => PAD + (t <= TB ? (t - T0) * pxYr : (TB - T0) * pxYr + (t - TB) * pxQuiet)
@@ -350,8 +416,8 @@ export default function SignalChart({ items, selectedId, onSelect, onTime }: {
   }
 
   // ── readout line ──
-  const hovered = hoverId ? hardware.find((h) => h.id === hoverId) : null
-  const talking = hardware.filter((h) => ARR.get(h.id)! <= p && END.get(h.id)! >= p - 1e-6).length
+  const hovered = hoverId ? list.find((h) => h.id === hoverId) : null
+  const talking = list.filter((h) => ARR.get(h.id)! <= p && END.get(h.id)! >= p - 1e-6).length
   const event = [...EVENTS].reverse().find((ev) => ev.t <= p)
   let readout: React.ReactNode = (
     <span className="sig__read">{event ? event.text : 'LISTENING FOR SIGNALS…'}<i>{talking} TALKING</i></span>
@@ -368,7 +434,7 @@ export default function SignalChart({ items, selectedId, onSelect, onTime }: {
   }
 
   const grid = cols && size.w
-    ? buildAscii({ cols, ch, p, atNow, headCol: Math.floor(headX / ch), x, tAt, visible, selectedId, hoverId })
+    ? buildAscii(tl, { cols, ch, p, atNow, headCol: Math.floor(headX / ch), x, tAt, visible, selectedId, hoverId })
     : null
   const textStyle = { fontSize: FS, lineHeight: `${LH}px` }
 
@@ -401,7 +467,7 @@ export default function SignalChart({ items, selectedId, onSelect, onTime }: {
         <span ref={measureRef} className="asc asc__measure" style={{ fontSize: FS }} aria-hidden>{'0'.repeat(50)}</span>
 
         <div className="sig__scroll" id="sig-strip" ref={scrollRef} tabIndex={0} onScroll={onScroll}
-          role="group" aria-label="Timeline 1966 to today. Scroll sideways to move through time."
+          role="group" aria-label={`Timeline ${T0} to today. Scroll sideways to move through time.`}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
           onPointerLeave={() => { if (!pan.current) setHoverId(null) }}>
           {grid && (

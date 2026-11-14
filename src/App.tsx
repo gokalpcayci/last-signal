@@ -14,7 +14,7 @@ import NavEdge from './ui/NavEdge'
 import { LedLogo } from './ui/LedLogo'
 import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
-import SignalChart, { ARRIVAL_ORDER, arrivedCount } from './ui/SignalChart'
+import SignalChart, { TIMELINES } from './ui/SignalChart'
 import StrandedGame from './ui/StrandedGame'
 import { exaggeration, setPlanet } from './scene/terrain'
 
@@ -104,13 +104,13 @@ export default function App() {
     return () => clearTimeout(t)
   }, [selectedId])
 
-  // time travel: only what had landed by the playhead (keyed by count, so scrolling within a gap doesn't rebuild the scene).
-  // The timeline chart is Moon-only for now, so Mars shows everything.
-  const landed = until == null || planet !== 'moon' ? ARRIVAL_ORDER.length : arrivedCount(until)
+  // time travel: only what had landed by the playhead (keyed by count, so scrolling within a gap doesn't rebuild the scene)
+  const timeline = TIMELINES[planet]
+  const landed = until == null ? timeline.order.length : timeline.arrivedCount(until)
   const items = useMemo(() => {
-    const ok = planet === 'moon' ? new Set(ARRIVAL_ORDER.slice(0, landed)) : null
-    return list.filter((h) => (filter === 'all' || h.kind === filter) && (!ok || ok.has(h.id)))
-  }, [filter, landed, list, planet])
+    const ok = new Set(timeline.order.slice(0, landed))
+    return list.filter((h) => (filter === 'all' || h.kind === filter) && ok.has(h.id))
+  }, [filter, landed, list, timeline])
   const selected = list.find((h) => h.id === selectedId) ?? null
   const active = list.filter((h) => h.status === 'active').length
 
@@ -264,12 +264,7 @@ export default function App() {
             </div>
           </div>
 
-          {planet === 'moon' ? <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} /> : (
-            <div className="panel later">
-              <div className="panel__title">Signal timeline</div>
-              <p>Mars timeline coming next — 1976 → today, Viking to Perseverance.</p>
-            </div>
-          )}
+          <SignalChart key={planet} planet={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
         </section>
       </div>
     </div>
