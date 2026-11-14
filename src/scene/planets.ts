@@ -45,6 +45,10 @@ export interface Planet {
     home: View
     portrait: View
     maxDistance: number
+    /** Closest zoom, and how far the fly-to stops (× the Moon's ~23 units). Mars keeps the camera
+     *  back: one mesh cell is ~99 km there, so close-ups would show the triangles. */
+    minDistance: number
+    flyTo: number
     /** Box the camera and target must stay in (never see the end of the map) */
     box: { min: V3; max: V3 }
   }
@@ -72,6 +76,8 @@ export const PLANETS: Record<PlanetId, Planet> = {
       home: { pos: [-4, 50, 58], target: [-4, -3, 0] },
       portrait: { pos: [-4, 90, 16], target: [-4, 0, 2] },
       maxDistance: 95,
+      minDistance: 10,
+      flyTo: 1,
       box: { min: [-48, -20, -46], max: [48, 95, 58] },
     },
     fog: [60, 175],
@@ -97,6 +103,8 @@ export const PLANETS: Record<PlanetId, Planet> = {
       // phones: fill the frame with the middle of the map (no visible edges); pan to reach the sides
       portrait: { pos: [0, 96, 4], target: [0, 0, -6] },
       maxDistance: 240,
+      minDistance: 26,
+      flyTo: 2.4,
       box: { min: [-95, -20, -80], max: [95, 230, 150] },
     },
     fog: [210, 520], // camera sits ~2.5× farther than on the Moon

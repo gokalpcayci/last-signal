@@ -1,5 +1,8 @@
+import type { PlanetId } from '../scene/planets'
+import { MARS_STRANDED } from './strandedMars'
+
 /**
- * "Stranded" — a short choice game in the bottom-left panel.
+ * "Stranded" — a short choice game in the bottom-left panel, one scenario per body.
  * The scenario (Leo, his lander Hopper, the rescue lander Kestrel) is made up and labelled as a
  * story in the UI. Every `fact` line must be true: keep them to things NASA has published, and
  * keep them in the app's kid-friendly voice.
@@ -25,18 +28,28 @@ export interface Step {
   choices: Choice[]
 }
 
-export const ASTRONAUT = 'LEO'
+export interface Scenario {
+  /** call sign shown in the log */
+  astronaut: string
+  /** two short lines on the start screen */
+  pitch: string[]
+  /** opening log lines once the mission starts */
+  intro: string[]
+  /** what happens when oxygen runs out (always gentle) */
+  lost: string
+  steps: Step[]
+}
 
 /** oxygen: start, cost of every step, extra cost of a detour */
 export const O2 = { start: 100, step: 8, detour: 12 }
 
-export const INTRO = [
+const MOON_INTRO = [
   'A STORY MISSION. Leo Park was testing a new mini lander, Hopper, near the old Apollo 15 site at Hadley.',
   'Hopper landed hard. Its radio is broken, and the base is far away.',
   'You are mission control. Help Leo get home using the things astronauts left behind.',
 ]
 
-export const STEPS: Step[] = [
+const MOON_STEPS: Step[] = [
   {
     call: 'Hopper is dead. My radio is broken and nobody on Earth knows I am OK. How do I get a message out?',
     choices: [
@@ -158,3 +171,17 @@ export const STEPS: Step[] = [
     ],
   },
 ]
+
+export const STRANDED: Record<PlanetId, Scenario> = {
+  moon: {
+    astronaut: 'LEO',
+    pitch: [
+      'An astronaut is stuck near the old Apollo 15 site. You are mission control.',
+      'Help LEO get home using the hardware astronauts left behind.',
+    ],
+    intro: MOON_INTRO,
+    lost: 'Leo’s oxygen got too low, so Kestrel picked him up early. He is safe, but try again and guide him there yourself!',
+    steps: MOON_STEPS,
+  },
+  mars: MARS_STRANDED,
+}
