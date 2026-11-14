@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { latToZ, loadDem, lonToX, makeGridMaterial, type Dem } from "./terrain"
+import { latToZ, loadDem, lonToX, makeGridMaterial, REVEAL_MAX, worldToLonLat, type Dem } from "./terrain"
+import { subsolarLon } from './sun'
 import type { Hardware } from '../data/hardware'
 import { STACKED_QUERY } from '../layout'
 
@@ -17,6 +18,13 @@ const MARKER_LIFT = 1.4
 const BG = "#0d0e0d"
 const FOG_NEAR = 120
 const FOG_FAR = 250
+
+// Boot-up sequence (seconds): the grid grows out from the center, then markers
+// ping in one by one in landing order (1966 → 1972).
+const BOOT_GRID_S = 2.2
+const BOOT_MARKERS_START_S = 1.5
+const BOOT_MARKER_STEP_S = 0.09
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Hardware at the same site sits within metres of each other — fan them out so markers don't overlap. */
 function layout(items: Hardware[], dem: Dem | null) {
@@ -36,12 +44,73 @@ function layout(items: Hardware[], dem: Dem | null) {
   return out
 }
 
-function Terrain({ dem }: { dem: Dem }) {
+export interface ProbeHit {
+  text: string
+  /** pointer position in canvas pixels */
+  sx: number
+  sy: number
+  /** surface point in world units */
+  point: Vec3
+}
+
+function Terrain({ dem, onProbe }: { dem: Dem; onProbe: (hit: ProbeHit | null) => void }) {
   const geo = useMemo(() => dem.buildGeometry(), [dem])
   const mat = useMemo(() => makeGridMaterial(BG, FOG_NEAR, FOG_FAR), [])
-  useEffect(() => () => { geo.dispose(); mat.dispose() }, [geo, mat])
+  // Uniforms are updated through this ref (per frame / per minute), never via the memoized value.
+  const matRef = useRef<THREE.ShaderMaterial | null>(null)
+  useEffect(() => {
+    matRef.current = mat
+    return () => { geo.dispose(); mat.dispose() }
+  }, [geo, mat])
+
+  // Live Sun: refresh the sub-solar longitude every minute.
+  useEffect(() => {
+    const update = () => {
+      if (matRef.current) matRef.current.uniforms.uSunLon.value = THREE.MathUtils.degToRad(subsolarLon())
+    }
+    update()
+    const t = setInterval(update, 60_000)
+    return () => clearInterval(t)
+  }, [mat])
+
+  // Boot reveal: grow uReveal from 0 to REVEAL_MAX with an ease-out.
+  const start = useRef<number | null>(null)
+  const skip = useMemo(() => reducedMotion(), [])
+  useFrame(({ clock }) => {
+    const m = matRef.current
+    if (!m) return
+    if (skip) { m.uniforms.uReveal.value = REVEAL_MAX; return }
+    start.current ??= clock.elapsedTime
+    const t = Math.min(1, (clock.elapsedTime - start.current) / BOOT_GRID_S)
+    m.uniforms.uReveal.value = REVEAL_MAX * (1 - Math.pow(1 - t, 3))
+  })
+
+  // Elevation probe: real LOLA value under the cursor (plateau only; the apron isn't real data).
+  const onMove = (e: ThreeEvent<PointerEvent>) => {
+    if (e.pointerType === 'touch') return
+    const { x, y, z } = e.point
+    if (!dem.onMap(x, z)) { onProbe(null); return }
+    const { lon, lat } = worldToLonLat(x, z)
+    const m = Math.round(dem.metersAt(lon, lat))
+    const fmt = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? pos : neg}`
+    onProbe({
+      text: `LAT ${fmt(lat, 'N', 'S')}  LON ${fmt(lon, 'E', 'W')}  ELEV ${m >= 0 ? '+' : '−'}${Math.abs(m).toLocaleString('en-US')} m`,
+      sx: e.nativeEvent.offsetX, sy: e.nativeEvent.offsetY, point: [x, y, z],
+    })
+  }
+
   // Solid surface + grid drawn in the shader: hills naturally hide the lines behind them.
-  return <mesh geometry={geo} material={mat} />
+  return <mesh geometry={geo} material={mat} onPointerMove={onMove} onPointerOut={() => onProbe(null)} />
+}
+
+/** Flat crosshair ring that follows the probe on the surface. */
+function ProbeCross({ crossRef }: { crossRef: React.Ref<THREE.Mesh> }) {
+  return (
+    <mesh ref={crossRef} rotation-x={-Math.PI / 2} visible={false} renderOrder={2}>
+      <ringGeometry args={[0.55, 0.75, 32]} />
+      <meshBasicMaterial color="#e6e6df" transparent opacity={0.85} depthTest={false} />
+    </mesh>
+  )
 }
 
 function Poles({ positions }: { positions: Vec3[] }) {
@@ -133,6 +202,32 @@ export default function MoonScene({ items, selectedId, onSelect }: Props) {
   }, [])
   const positions = useMemo(() => layout(items, dem), [items, dem])
   const els = useRef(new Map<string, HTMLElement>())
+  const probeLabel = useRef<HTMLDivElement>(null)
+  const probeCross = useRef<THREE.Mesh>(null)
+  // Probe updates go straight to the DOM / mesh (no React re-render on every mouse move).
+  const onProbe = (hit: ProbeHit | null) => {
+    const label = probeLabel.current, cross = probeCross.current
+    if (!label || !cross) return
+    if (!hit) { label.style.display = 'none'; cross.visible = false; return }
+    label.textContent = hit.text
+    label.style.display = ''
+    label.style.transform = `translate(${hit.sx + 14}px, ${hit.sy + 14}px)`
+    cross.position.set(hit.point[0], hit.point[1] + 0.08, hit.point[2])
+    cross.visible = true
+  }
+
+  // Landing order (1966 → 1972) drives the marker ping-in delay.
+  const order = useMemo(() => {
+    const sorted = [...items].sort((a, b) => a.arrived.localeCompare(b.arrived))
+    return new Map(sorted.map((h, i) => [h.id, i]))
+  }, [items])
+  // Poles appear with the first markers, once the grid has mostly grown in.
+  const [polesOn, setPolesOn] = useState(false)
+  useEffect(() => {
+    if (!dem) return
+    const t = setTimeout(() => setPolesOn(true), reducedMotion() ? 0 : BOOT_MARKERS_START_S * 1000)
+    return () => clearTimeout(t)
+  }, [dem])
 
   return (
     <div className="moon">
@@ -143,13 +238,16 @@ export default function MoonScene({ items, selectedId, onSelect }: Props) {
       >
         <color attach="background" args={[BG]} />
         <fog attach="fog" args={[BG, FOG_NEAR, FOG_FAR]} />
-        {dem && <Terrain dem={dem} />}
-        <Poles positions={[...positions.values()]} />
+        {dem && <Terrain dem={dem} onProbe={onProbe} />}
+        <ProbeCross crossRef={probeCross} />
+        {polesOn && <Poles positions={[...positions.values()]} />}
         <Projector positions={positions} els={els} />
         <CameraRig selectedId={selectedId} positions={positions} />
       </Canvas>
 
-      <div className="markers">
+      <div className="probe" ref={probeLabel} style={{ display: 'none' }} aria-hidden />
+
+      <div className={`markers${dem ? ' is-booting' : ''}`}>
         {items.map((h) => (
           <button
             key={h.id}
@@ -158,8 +256,9 @@ export default function MoonScene({ items, selectedId, onSelect }: Props) {
             onClick={() => onSelect(h.id)}
             aria-label={`${h.mission} — ${h.name}`}
             data-label={`${h.mission.toUpperCase()} · ${h.name}`}
-            style={{ display: 'none' }}
+            style={{ display: 'none', '--ping-delay': `${BOOT_MARKERS_START_S + (order.get(h.id) ?? 0) * BOOT_MARKER_STEP_S}s` } as React.CSSProperties}
           >
+            <span className="marker__ping" aria-hidden />
             <span className="marker__icon">{h.status === 'active' ? '✓' : '!'}</span>
           </button>
         ))}

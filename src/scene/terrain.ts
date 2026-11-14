@@ -43,10 +43,16 @@ export interface Dem {
   heightAt: (x: number, z: number) => number
   /** Raw LOLA elevation in meters at lon/lat (degrees) */
   metersAt: (lon: number, lat: number) => number
+  /** LRO surface brightness 0–1 at lon/lat (dark maria ≈ low, bright highlands ≈ high) */
+  albedoAt: (lon: number, lat: number) => number
+  /** True where the real DEM is shown (the plateau), false on the stylized apron */
+  onMap: (x: number, z: number) => boolean
   buildGeometry: () => THREE.BufferGeometry
 }
 
-function makeDem(meta: DemMeta, raw: Uint16Array): Dem {
+export const worldToLonLat = (x: number, z: number) => ({ lon: xToLon(x), lat: zToLat(z) })
+
+function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray): Dem {
   const { width: W, height: H, ppd } = meta
   const px = (c: number, r: number) => {
     const ci = Math.min(W - 1, Math.max(0, c)), ri = Math.min(H - 1, Math.max(0, r))
@@ -78,7 +84,27 @@ function makeDem(meta: DemMeta, raw: Uint16Array): Dem {
     if (m <= 0) return APRON_Y
     return APRON_Y + (demHeight(x, z) - APRON_Y) * m
   }
-  return { heightAt, metersAt, buildGeometry: () => buildTerrainGeometry(heightAt) }
+  /** Nearest-pixel albedo (RGBA from canvas; gray, so read R). Same grid as the DEM. */
+  const albedoAt = (lon: number, lat: number) => {
+    const c = Math.min(W - 1, Math.max(0, Math.round((lon - meta.lonMin) * ppd - 0.5)))
+    const r = Math.min(H - 1, Math.max(0, Math.round((meta.latMax - lat) * ppd - 0.5)))
+    return albedo[(r * W + c) * 4] / 255
+  }
+  const onMap = (x: number, z: number) => mesaMask(x, z) > 0.98
+  const dem: Dem = { heightAt, metersAt, albedoAt, onMap, buildGeometry: () => buildTerrainGeometry(dem) }
+  return dem
+}
+
+async function loadAlbedo(url: string, w: number, h: number) {
+  const img = new Image()
+  img.src = url
+  await img.decode()
+  const canvas = document.createElement('canvas')
+  canvas.width = w; canvas.height = h
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('2D canvas unavailable for albedo decoding')
+  ctx.drawImage(img, 0, 0, w, h)
+  return ctx.getImageData(0, 0, w, h).data
 }
 
 let demPromise: Promise<Dem> | null = null
@@ -89,7 +115,8 @@ export function loadDem(): Promise<Dem> {
       fetch(`${base}terrain/moon_dem.json`).then((r) => r.json() as Promise<DemMeta>),
       fetch(`${base}terrain/moon_dem.bin`).then((r) => r.arrayBuffer()),
     ])
-    return makeDem(meta, new Uint16Array(buf))
+    const albedo = await loadAlbedo(`${base}terrain/moon_albedo.png`, meta.width, meta.height)
+    return makeDem(meta, new Uint16Array(buf), albedo)
   })()
   return demPromise
 }
@@ -104,20 +131,25 @@ const C_TERRACOTTA = new THREE.Color('#9c5636')
 const C_CLIFF = new THREE.Color("#7a4a33")
 const C_APRON = new THREE.Color("#55636a")
 
-function buildTerrainGeometry(heightAt: (x: number, z: number) => number) {
+function buildTerrainGeometry(dem: Dem) {
   const g = new THREE.PlaneGeometry(WORLD.width, WORLD.depth, WORLD.segX, WORLD.segZ)
   g.rotateX(-Math.PI / 2)
   const pos = g.attributes.position as THREE.BufferAttribute
   const colors = new Float32Array(pos.count * 3)
   const mesa = new Float32Array(pos.count)
+  const alb = new Float32Array(pos.count)
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i)
     mesa[i] = mesaMask(x, z)
-    pos.setY(i, heightAt(x, z))
+    pos.setY(i, dem.heightAt(x, z))
+    alb[i] = dem.albedoAt(xToLon(x), zToLat(z))
   }
+  const top = Array.from({ length: pos.count }, (_, i) => i).filter((i) => mesa[i] > 0.98)
+  // Albedo contrast stretch (5th–95th percentile) so maria vs. highlands reads clearly.
+  const sortedAlb = top.map((i) => alb[i]).sort((a, b) => a - b)
+  const aLo = sortedAlb[Math.floor(sortedAlb.length * 0.05)], aHi = sortedAlb[Math.floor(sortedAlb.length * 0.95)]
   // Color the plateau by elevation *rank* (histogram equalization): lunar heights
   // cluster in the middle, so a plain min→max ramp paints nearly everything one color.
-  const top = Array.from({ length: pos.count }, (_, i) => i).filter((i) => mesa[i] > 0.98)
   top.sort((a, b) => pos.getY(a) - pos.getY(b))
   const rank = new Float32Array(pos.count)
   top.forEach((idx, r) => { rank[idx] = r / (top.length - 1) })
@@ -134,6 +166,9 @@ function buildTerrainGeometry(heightAt: (x: number, z: number) => number) {
       // steep slopes (crater walls, mountain flanks) pick up terracotta patches
       const slope = 1 - nrm.getY(i)
       c.lerp(C_TERRACOTTA, THREE.MathUtils.smoothstep(slope, 0.05, 0.22) * 0.75)
+      // real LRO brightness: dark maria dim, bright highlands and crater rays lift
+      const a = THREE.MathUtils.clamp((alb[i] - aLo) / Math.max(aHi - aLo, 1e-3), 0, 1)
+      c.multiplyScalar(0.6 + 0.75 * a)
     } else if (m > 0.02) {
       // cliff face: darker terracotta fading down into the apron
       c.copy(C_APRON).lerp(C_CLIFF, m)
@@ -153,10 +188,16 @@ function buildTerrainGeometry(heightAt: (x: number, z: number) => number) {
   return g
 }
 
+/** Max distance from the center to a world corner — the boot reveal ends past this. */
+export const REVEAL_MAX = Math.hypot(WORLD.width / 2, WORLD.depth / 2) + 10
+
 /**
  * Draws the grid in the fragment shader instead of `wireframe: true` (which WebGL
- * always renders 1px wide). Gives square cells like the reference, constant
- * on-screen line width via fwidth(), a faint halo and fog — in a single draw call.
+ * always renders 1px wide). One draw call handles:
+ *  - square cells with constant on-screen line width (fwidth), faint halo, fog
+ *  - 1 km contour lines on the plateau (5 km lines brighter)
+ *  - live day/night shading from the Sun's position (uSunLon), with a glowing terminator
+ *  - the boot-up reveal: a ring that grows from the center (uReveal)
  */
 export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: number) {
   return new THREE.ShaderMaterial({
@@ -167,18 +208,31 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uFog: { value: new THREE.Color(fogColor) },
       uFogNear: { value: fogNear },
       uFogFar: { value: fogFar },
+      uContourStep: { value: UNITS_PER_KM }, // 1 km of real elevation
+      uSunLon: { value: 0 },                 // sub-solar longitude, radians
+      uReveal: { value: REVEAL_MAX },        // world-unit radius revealed so far
+      uDegX: { value: 1 / 1.15 },            // world x → degrees lon
+      uDegZ: { value: -1 / 1.05 },           // world z → degrees lat
     },
     vertexShader: /* glsl */ `
       attribute vec3 color;
       attribute float aMesa;
+      uniform float uDegX;
+      uniform float uDegZ;
       varying vec2 vUv;
       varying vec3 vColor;
       varying float vDepth;
       varying float vMesa;
+      varying float vHeight;
+      varying vec2 vXZ;
+      varying vec2 vLonLat; // radians
       void main() {
         vUv = uv;
         vColor = color;
         vMesa = aMesa;
+        vHeight = position.y;
+        vXZ = position.xz;
+        vLonLat = radians(vec2(position.x * uDegX, position.z * uDegZ));
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         vDepth = -mv.z;
         gl_Position = projectionMatrix * mv;
@@ -191,22 +245,55 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uniform vec3 uFog;
       uniform float uFogNear;
       uniform float uFogFar;
+      uniform float uContourStep;
+      uniform float uSunLon;
+      uniform float uReveal;
       varying vec2 vUv;
       varying vec3 vColor;
       varying float vDepth;
       varying float vMesa;
+      varying float vHeight;
+      varying vec2 vXZ;
+      varying vec2 vLonLat;
+
+      float lineAA(float v, float widthPx) {
+        float w = fwidth(v);
+        float d = abs(fract(v - 0.5) - 0.5) / max(w, 1e-4);
+        return 1.0 - smoothstep(widthPx - 0.5, widthPx + 0.5, d);
+      }
+
       void main() {
-        // apron gets a coarser grid (every 2nd line), like the reference foreground
+        // ── boot-up reveal: hide everything beyond the growing ring ──
+        float r = length(vXZ);
+        if (r > uReveal) discard;
+        float ring = exp(-abs(uReveal - r) * 0.35);
+
+        // ── grid (apron gets every 2nd line, like the reference foreground) ──
         vec2 g = vUv * uCells * (vMesa > 0.5 ? 1.0 : 0.5);
         vec2 w = fwidth(g);
-        // distance to nearest grid line, in screen pixels
         vec2 d = abs(fract(g - 0.5) - 0.5) / max(w, 1e-4);
         float px = min(d.x, d.y);
         float core = 1.0 - smoothstep(uWidth - 0.5, uWidth + 0.5, px);
         float glow = exp(-px * 0.9) * 0.12;
-        // fade lines where cells get smaller than ~3px (far away) to avoid moiré
         float density = clamp(1.0 - (max(w.x, w.y) - 0.2) / 0.3, 0.55, 1.0);
         vec3 col = uFill + vColor * 0.1 + vColor * (core * 1.7 + glow) * density;
+
+        // ── contour lines on the plateau: every 1 km, brighter every 5 km ──
+        float onTop = smoothstep(0.9, 1.0, vMesa);
+        float minor = lineAA(vHeight / uContourStep, 0.6) * 0.22;
+        float major = lineAA(vHeight / (uContourStep * 5.0), 0.8) * 0.4;
+        col += vec3(0.85, 0.82, 0.7) * max(minor, major) * onTop;
+
+        // ── live day/night: Sun elevation at this point (sub-solar latitude ≈ 0) ──
+        float sunDot = cos(vLonLat.y) * cos(vLonLat.x - uSunLon);
+        float day = smoothstep(-0.02, 0.09, sunDot);
+        col *= mix(0.42, 1.0, day);
+        float terminator = exp(-abs(sunDot) * 45.0) * onTop;
+        col += vec3(0.95, 0.72, 0.38) * terminator * 0.22;
+
+        // bright leading edge while booting
+        col += vec3(0.55, 0.85, 0.6) * ring * step(uReveal, ${REVEAL_MAX.toFixed(1)} - 1.0) * 0.6;
+
         float fog = smoothstep(uFogNear, uFogFar, vDepth);
         gl_FragColor = vec4(mix(col, uFog, fog), 1.0);
       }

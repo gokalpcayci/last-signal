@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import MoonScene from './scene/MoonScene'
 import Globe from './ui/Globe'
 import { STACKED_QUERY } from './layout'
+import SunNow from './ui/SunNow'
 import { hardware, kindLabel, type HardwareKind } from './data/hardware'
 import {
   IconArrowRight, IconChevronDown, IconChevronLeft, IconChevronRight, IconCompass,
@@ -130,6 +131,7 @@ export default function App() {
                 <dt>Last signal</dt><dd>{fmtDate(selected.lastSignal)}</dd>
                 <dt>Coords</dt><dd>{selected.lat.toFixed(2)}°, {selected.lon.toFixed(2)}°</dd>
               </dl>
+              <SunNow lat={selected.lat} lon={selected.lon} name={selected.mission} />
               <p>{selected.story}</p>
               <div className="dyk"><span>DID YOU KNOW?</span>{selected.didYouKnow}</div>
               <a href={selected.source} target="_blank" rel="noreferrer">NASA RECORD →</a>
