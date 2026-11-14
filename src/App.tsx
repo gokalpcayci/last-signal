@@ -248,13 +248,7 @@ export default function App() {
 
         {/* bottom row */}
         <section className="bottom">
-          {planet === 'moon' ? <StrandedGame onSelect={setSelectedId} /> : (
-            <div className="panel later">
-              <div className="panel__title">Stranded <span className="game__tag">[STORY]</span></div>
-              <p>Leo’s adventure happens on the Moon.</p>
-              <button onClick={() => switchPlanet('moon')}>PLAY ON THE MOON →</button>
-            </div>
-          )}
+          <StrandedGame key={planet} planet={planet} onSelect={setSelectedId} />
 
           <div className="panel radar">
             <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />

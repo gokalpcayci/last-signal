@@ -241,7 +241,7 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
     const c = controls.current
     if (!c) return
     const p = selectedId ? positions.get(selectedId) : undefined
-    const k = portrait ? 1.2 : 1
+    const k = (portrait ? 1.2 : 1) * activePlanet().camera.flyTo
     if (p) c.setLookAt(p[0] + 8 * k, p[1] + 14 * k, p[2] + 16 * k, p[0], p[1], p[2], true)
     else {
       const { home, portrait: top } = activePlanet().camera
@@ -262,7 +262,7 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
   return (
     <CameraControls
       ref={controls}
-      minDistance={10}
+      minDistance={activePlanet().camera.minDistance}
       maxDistance={activePlanet().camera.maxDistance}
       // desktop can't tilt fully top-down; phones keep their top-down home view
       minPolarAngle={portrait ? 0 : Math.PI * 0.2}

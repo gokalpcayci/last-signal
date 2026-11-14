@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { hardware } from '../data/hardware'
-import { ASTRONAUT, INTRO, O2, STEPS } from '../data/stranded'
+import { marsHardware } from '../data/mars'
+import { O2, STRANDED } from '../data/stranded'
+import type { PlanetId } from '../scene/planets'
 
 /**
- * Bottom-left panel: "Stranded", a short choice game (content in src/data/stranded.ts).
- * You are mission control; each choice flies the map to the real hardware Leo uses.
- * Detours cost extra oxygen and reveal a fact; running out is gentle (Kestrel picks him up early).
+ * Bottom-left panel: "Stranded", a short choice game, one scenario per body (src/data/stranded*.ts).
+ * You are mission control; each choice flies the map to the real hardware the astronaut uses.
+ * Detours cost extra oxygen and reveal a fact; running out is gentle (an early pickup). Key by planet.
  */
 
 type Line = { who: 'leo' | 'you' | 'fact' | 'sys'; text: string }
@@ -16,9 +18,15 @@ const o2Bar = (v: number) => {
   const lit = Math.round((Math.max(0, v) / O2.start) * O2_CELLS)
   return '▓'.repeat(lit) + '░'.repeat(O2_CELLS - lit)
 }
-const nameOf = (id: string) => { const h = hardware.find((x) => x.id === id)!; return `${h.mission} ${h.name.replace(/\s*\(.*\)/, '')}` }
+const ALL = [...hardware, ...marsHardware]
+const nameOf = (id: string) => {
+  const h = ALL.find((x) => x.id === id)!
+  const name = h.name.replace(/\s*\(.*\)/, '')
+  return h.mission === name || h.mission.endsWith(` ${name}`) ? name : `${h.mission} ${name}`
+}
 
-export default function StrandedGame({ onSelect }: { onSelect: (id: string) => void }) {
+export default function StrandedGame({ planet, onSelect }: { planet: PlanetId; onSelect: (id: string) => void }) {
+  const { astronaut: ASTRONAUT, pitch, intro: INTRO, lost, steps: STEPS } = STRANDED[planet]
   const [phase, setPhase] = useState<Phase>('intro')
   const [step, setStep] = useState(0)
   const [o2, setO2] = useState(O2.start)
@@ -43,7 +51,7 @@ export default function StrandedGame({ onSelect }: { onSelect: (id: string) => v
     setO2(left)
 
     if (left <= 0) {
-      lines.push({ who: 'sys', text: 'Leo’s oxygen got too low, so Kestrel picked him up early. He is safe, but try again and guide him there yourself!' })
+      lines.push({ who: 'sys', text: lost })
       setPhase('lost')
     } else if (!c.good) {
       setTried((t) => [...t, i])
@@ -77,8 +85,7 @@ export default function StrandedGame({ onSelect }: { onSelect: (id: string) => v
       <div className="game__log" ref={logRef} aria-live="polite">
         {phase === 'intro' ? (
           <div className="game__intro">
-            <p>An astronaut is stuck near the old Apollo 15 site. You are mission control.</p>
-            <p>Help {ASTRONAUT} get home using the hardware astronauts left behind.</p>
+            {pitch.map((t) => <p key={t}>{t}</p>)}
           </div>
         ) : log.map((l, i) => (
           <p key={i} className={`game__line game__line--${l.who}`}>
@@ -90,7 +97,7 @@ export default function StrandedGame({ onSelect }: { onSelect: (id: string) => v
         ))}
         {phase === 'won' && (
           <div className="game__end">
-            <p className="ok">MISSION COMPLETE · {ASTRONAUT} IS ON HIS WAY HOME · O₂ LEFT {o2}%</p>
+            <p className="ok">MISSION COMPLETE · {ASTRONAUT} IS ON THE WAY HOME · O₂ LEFT {o2}%</p>
             <p>You used {visited.length} pieces of old hardware: {visited.map((id, i) => (
               <span key={id}>{i > 0 && ', '}<button className="game__ref" onClick={() => onSelect(id)}>{nameOf(id)}</button></span>
             ))}. Abandoned, but not forgotten.</p>
