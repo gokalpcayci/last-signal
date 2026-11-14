@@ -1,20 +1,29 @@
 import * as THREE from 'three'
+import { PLANETS, type Planet, type PlanetId } from './planets'
 
 /**
- * Real lunar topography from NASA's Lunar Orbiter Laser Altimeter (LOLA),
- * via the NASA SVS CGI Moon Kit. Built by scripts/build_dem.py into
- * public/terrain/moon_dem.{bin,json}.
+ * Real topography: the Moon from LRO LOLA (NASA SVS CGI Moon Kit, scripts/build_dem.py),
+ * Mars from MGS MOLA (PDS, scripts/build_mars_dem.py) → public/terrain/<body>_dem.{bin,json}.
+ * Per-body numbers (plateau size, degrees → units, curve, vertical scale) are in planets.ts.
  *
- * World units: x = east, z = south. ~1.1 units per degree.
+ * World units: x = east, z = south.
  *
  * Layout (like the reference diorama): the real DEM sits on a raised central
  * plateau (MESA) with cliff edges; around it is a flat, coarser "apron" grid.
  * The apron is a stylized frame only — every hardware site is on the plateau.
  */
 export const WORLD = { width: 340, depth: 290, segX: 366, segZ: 312 }
-/** Plateau half-size in world units: the whole near side, lon ±90°, lat ±70° (DEM crop has a margin) */
-const MESA = { hx: 74, hz: 55, radius: 12 }
 const APRON_Y = -9
+
+/**
+ * The body being shown. Module state on purpose: lonToX & co. are used by many
+ * scene modules, and App sets it before rendering (the scene is keyed by planet,
+ * so everything that read the old one is rebuilt).
+ */
+let P: Planet = PLANETS.moon
+export const activePlanet = () => P
+export function setPlanet(id: PlanetId) { P = PLANETS[id] }
+const wrap180 = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180
 
 /**
  * Planet curvature: the surface bends down with distance from the center like a
@@ -22,46 +31,43 @@ const APRON_Y = -9
  * drops the world edges below it, so the end of the grid is never visible.
  * Purely visual — contours, colors and the probe use the uncurved elevation.
  */
-const CURVE_R = 300
-export const curvature = (x: number, z: number) => (x * x + z * z) / (2 * CURVE_R)
+export const curvature = (x: number, z: number) => (x * x + z * z) / (2 * P.curveR)
 
 /** Signed distance to the plateau edge (negative inside), with an irregular, natural-looking wobble. */
 function mesaSdf(x: number, z: number) {
-  const qx = Math.abs(x) - (MESA.hx - MESA.radius)
-  const qz = Math.abs(z) - (MESA.hz - MESA.radius)
-  const sdf = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - MESA.radius
+  const { hx, hz, radius } = P.mesa
+  const qx = Math.abs(x) - (hx - radius)
+  const qz = Math.abs(z) - (hz - radius)
+  const sdf = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - radius
   const jitter = 2.2 * Math.sin(x * 0.21) + 1.6 * Math.sin(z * 0.17 + 1.3) + 1.1 * Math.sin((x + z) * 0.33)
   return sdf + jitter
 }
 
-/**
- * Width (world units) of the fade at the plateau's rim. Wide on purpose: seen at a grazing
- * angle, a narrow world-space band squashes into a few pixels and reads as a hard black edge.
- * Sites reach |z| ≈ 31 (Tycho), safely inside the fade's start.
- */
-const EDGE_FADE = 32
+// Rim fade width = P.edgeFade. Wide on purpose: seen at a grazing angle, a narrow
+// world-space band squashes into a few pixels and reads as a hard black edge.
 
 /** 1 on the plateau, 0 on the apron; a ~3-unit cliff. */
 export function mesaMask(x: number, z: number) {
   return 1 - THREE.MathUtils.smoothstep(mesaSdf(x, z), -1.5, 1.5)
 }
 
-// World units per degree. Slightly less in z so the near side (180° × 140°) keeps a pleasing aspect.
-const X_PER_DEG = 0.8
-const Z_PER_DEG = 0.76
-export const lonToX = (lon: number) => lon * X_PER_DEG
-export const latToZ = (lat: number) => -lat * Z_PER_DEG
-const xToLon = (x: number) => x / X_PER_DEG
-const zToLat = (z: number) => -z / Z_PER_DEG
+// World units per degree (P.xPerDeg / P.zPerDeg); x = 0 is P.lonCenter.
+export const lonToX = (lon: number) => wrap180(lon - P.lonCenter) * P.xPerDeg
+export const latToZ = (lat: number) => -lat * P.zPerDeg
+/** Not wrapped: off the plateau x can run past ±180° from the center (only the apron is there). */
+const xToLon = (x: number) => x / P.xPerDeg + P.lonCenter
+const zToLat = (z: number) => -z / P.zPerDeg
 
-/** Vertical exaggeration: real relief (~11 km) would be nearly flat at this map scale. */
-export const UNITS_PER_KM = 1.1
-/** True scale: the map's horizontal scale (X_PER_DEG world units per degree; 1° ≈ 30.32 km on the Moon). */
-export const TRUE_UNITS_PER_KM = X_PER_DEG / ((Math.PI * 1737.4) / 180)
-export const EXAGGERATION = Math.round(UNITS_PER_KM / TRUE_UNITS_PER_KM)
+/** Vertical exaggeration: real relief would be nearly flat at this map scale. */
+export const unitsPerKm = () => P.unitsPerKm
+/** True scale: the map's horizontal scale (xPerDeg world units per degree of a great circle). */
+export const trueUnitsPerKm = () => P.xPerDeg / ((Math.PI * P.radiusKm) / 180)
+export const exaggeration = () => Math.round(unitsPerKm() / trueUnitsPerKm())
 
 interface DemMeta {
   width: number; height: number; ppd: number
+  /** lonMin/lonMax are relative to this (Mars map is re-centered); 0 if absent */
+  lonCenter?: number
   lonMin: number; lonMax: number; latMin: number; latMax: number
 }
 
@@ -72,10 +78,10 @@ export interface Dem {
   flatHeightAt: (x: number, z: number, u?: number) => number
   /** Current vertical scale in world units per km (animated by the true-scale toggle) */
   unitsPerKm: number
-  /** Raw LOLA elevation in meters at lon/lat (degrees) */
+  /** Raw elevation in meters at lon/lat (degrees east) */
   metersAt: (lon: number, lat: number) => number
-  /** LRO surface brightness 0–1 at lon/lat (dark maria ≈ low, bright highlands ≈ high) */
-  albedoAt: (lon: number, lat: number) => number
+  /** Surface brightness 0–1 at lon/lat (dark maria ≈ low, bright highlands ≈ high); null = no map */
+  albedoAt: ((lon: number, lat: number) => number) | null
   /** True where the real DEM is shown (the plateau), false on the stylized apron */
   onMap: (x: number, z: number) => boolean
   buildGeometry: () => THREE.BufferGeometry
@@ -83,15 +89,18 @@ export interface Dem {
 
 export const worldToLonLat = (x: number, z: number) => ({ lon: xToLon(x), lat: zToLat(z) })
 
-function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray): Dem {
+function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray | null): Dem {
   const { width: W, height: H, ppd } = meta
+  const center = meta.lonCenter ?? 0
+  /** Column coordinate for a longitude (wraps around the globe) */
+  const col = (lon: number) => (wrap180(lon - center) - meta.lonMin) * ppd
   const px = (c: number, r: number) => {
     const ci = Math.min(W - 1, Math.max(0, c)), ri = Math.min(H - 1, Math.max(0, r))
     return (raw[ri * W + ci] - 20000) / 2 // meters
   }
   /** Bilinear sample in meters at lon/lat. Pixel centers sit at +0.5. */
   const metersAt = (lon: number, lat: number) => {
-    const c = (lon - meta.lonMin) * ppd - 0.5
+    const c = col(lon) - 0.5
     const r = (meta.latMax - lat) * ppd - 0.5
     const c0 = Math.floor(c), r0 = Math.floor(r)
     const fx = c - c0, fy = r - r0
@@ -116,15 +125,15 @@ function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray): De
     return APRON_Y + (kmAt(x, z) * u - APRON_Y) * m
   }
   /** Nearest-pixel albedo (RGBA from canvas; gray, so read R). Same grid as the DEM. */
-  const albedoAt = (lon: number, lat: number) => {
-    const c = Math.min(W - 1, Math.max(0, Math.round((lon - meta.lonMin) * ppd - 0.5)))
+  const albedoAt = albedo && ((lon: number, lat: number) => {
+    const c = Math.min(W - 1, Math.max(0, Math.round(col(lon) - 0.5)))
     const r = Math.min(H - 1, Math.max(0, Math.round((meta.latMax - lat) * ppd - 0.5)))
     return albedo[(r * W + c) * 4] / 255
-  }
+  })
   const onMap = (x: number, z: number) => mesaMask(x, z) > 0.98
   const heightAt = (x: number, z: number, u?: number) => flatHeightAt(x, z, u) - curvature(x, z)
   const dem: Dem = {
-    heightAt, flatHeightAt, metersAt, albedoAt, onMap, unitsPerKm: UNITS_PER_KM,
+    heightAt, flatHeightAt, metersAt, albedoAt, onMap, unitsPerKm: P.unitsPerKm,
     buildGeometry: () => buildTerrainGeometry(dem, kmAt),
   }
   return dem
@@ -142,43 +151,47 @@ async function loadAlbedo(url: string, w: number, h: number) {
   return ctx.getImageData(0, 0, w, h).data
 }
 
-let demPromise: Promise<Dem> | null = null
+const demPromises = new Map<PlanetId, Promise<Dem>>()
+/** Loads (once per body) the active planet's elevation grid. */
 export function loadDem(): Promise<Dem> {
-  demPromise ??= (async () => {
-    const base = import.meta.env.BASE_URL
-    const [meta, buf] = await Promise.all([
-      fetch(`${base}terrain/moon_dem.json`).then((r) => r.json() as Promise<DemMeta>),
-      fetch(`${base}terrain/moon_dem.bin`).then((r) => r.arrayBuffer()),
-    ])
-    const albedo = await loadAlbedo(`${base}terrain/moon_albedo.png`, meta.width, meta.height)
-    return makeDem(meta, new Uint16Array(buf), albedo)
-  })()
-  return demPromise
+  const planet = P
+  let p = demPromises.get(planet.id)
+  if (!p) {
+    p = (async () => {
+      const base = import.meta.env.BASE_URL
+      const [meta, buf] = await Promise.all([
+        fetch(`${base}${planet.dem}_dem.json`).then((r) => r.json() as Promise<DemMeta>),
+        fetch(`${base}${planet.dem}_dem.bin`).then((r) => r.arrayBuffer()),
+      ])
+      const albedo = planet.albedo ? await loadAlbedo(`${base}${planet.albedo}`, meta.width, meta.height) : null
+      return makeDem(meta, new Uint16Array(buf), albedo)
+    })()
+    demPromises.set(planet.id, p)
+  }
+  return p
 }
 
 // Muted elevation ramp (by elevation *rank*): deep blue-slate basins → teal-grey →
 // olive → ochre/sand → pale regolith peaks. It widens *brightness* more than hue — that's
 // what reads as depth, and in halftone it also drives dot size. Rule: no saturated green
 // or orange in the terrain; those mean "still working" / "silent" on the markers.
-const RAMP: [number, THREE.Color][] = [
-  [0.0, new THREE.Color('#34505e')],
-  [0.25, new THREE.Color('#5a7a7c')],
-  [0.5, new THREE.Color('#6b7444')],
-  [0.75, new THREE.Color('#8d7b4d')],
-  [1.0, new THREE.Color('#a39876')],
-]
-function rampAt(t: number, out: THREE.Color) {
+// The stops are per body (P.ramp); Mars swaps the blue-green for dusty mauve → tan.
+function rampAt(ramp: [number, THREE.Color][], t: number, out: THREE.Color) {
   let k = 1
-  while (k < RAMP.length - 1 && t > RAMP[k][0]) k++
-  const [t0, c0] = RAMP[k - 1], [t1, c1] = RAMP[k]
+  while (k < ramp.length - 1 && t > ramp[k][0]) k++
+  const [t0, c0] = ramp[k - 1], [t1, c1] = ramp[k]
   return out.copy(c0).lerp(c1, THREE.MathUtils.smoothstep(t, t0, t1))
 }
-// steep slopes: rust-brown, kept well away from the markers' status orange
-const C_RUST = new THREE.Color('#74503a')
-const C_CLIFF = new THREE.Color("#7a4a33")
-const C_APRON = new THREE.Color("#55636a")
 
 function buildTerrainGeometry(dem: Dem, kmAt: (x: number, z: number) => number) {
+  const RAMP = P.ramp.map(([t, hex]) => [t, new THREE.Color(hex)] as [number, THREE.Color])
+  // steep slopes: rust-brown, kept well away from the markers' status orange
+  const C_RUST = new THREE.Color(P.rust)
+  const C_CLIFF = new THREE.Color(P.cliff)
+  const C_APRON = new THREE.Color(P.apron)
+  const UNITS_PER_KM = P.unitsPerKm
+  const EDGE_FADE = P.edgeFade
+  const albedoAt = dem.albedoAt
   const g = new THREE.PlaneGeometry(WORLD.width, WORLD.depth, WORLD.segX, WORLD.segZ)
   g.rotateX(-Math.PI / 2)
   const pos = g.attributes.position as THREE.BufferAttribute
@@ -193,7 +206,7 @@ function buildTerrainGeometry(dem: Dem, kmAt: (x: number, z: number) => number) 
     km[i] = mesa[i] > 0 ? kmAt(x, z) : 0
     // flat first, at the exaggerated scale: colors/slopes always use this relief
     pos.setY(i, APRON_Y + (km[i] * UNITS_PER_KM - APRON_Y) * mesa[i])
-    alb[i] = dem.albedoAt(xToLon(x), zToLat(z))
+    alb[i] = albedoAt ? albedoAt(xToLon(x), zToLat(z)) : 0.5
   }
   const top = Array.from({ length: pos.count }, (_, i) => i).filter((i) => mesa[i] > 0.98)
   // Albedo contrast stretch (5th–95th percentile) so maria vs. highlands reads clearly.
@@ -211,12 +224,13 @@ function buildTerrainGeometry(dem: Dem, kmAt: (x: number, z: number) => number) 
     const m = mesa[i]
     if (m > 0.98) {
       const t = rank[i]
-      rampAt(t, c)
+      rampAt(RAMP, t, c)
       // steep slopes (crater walls, mountain flanks) pick up rust-brown patches
       const slope = 1 - nrm.getY(i)
       c.lerp(C_RUST, THREE.MathUtils.smoothstep(slope, 0.05, 0.22) * 0.6)
       // real LRO brightness: dark maria dim, bright highlands and crater rays lift
-      const a = THREE.MathUtils.clamp((alb[i] - aLo) / Math.max(aHi - aLo, 1e-3), 0, 1)
+      // (no map → a = 0.5, the middle of the same range)
+      const a = albedoAt ? THREE.MathUtils.clamp((alb[i] - aLo) / Math.max(aHi - aLo, 1e-3), 0, 1) : 0.5
       c.multiplyScalar(0.62 + 0.55 * a) // bright highlands lift, but never toward white
     } else if (m > 0.02) {
       // cliff face: darker terracotta fading down into the apron
@@ -291,11 +305,11 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uFog: { value: bg },
       uFogNear: { value: fogNear },
       uFogFar: { value: fogFar },
-      uContourStep: { value: 1 },            // aElev is in km: a line every 1 km
+      uContourStep: { value: P.contourKm },  // aElev is in km
       uSunLon: { value: 0 },                 // sub-solar longitude, radians
       uReveal: { value: REVEAL_MAX },        // world-unit radius revealed so far
-      uDegX: { value: 1 / X_PER_DEG },       // world x → degrees lon
-      uDegZ: { value: -1 / Z_PER_DEG },      // world z → degrees lat
+      uDegX: { value: 1 / P.xPerDeg },       // world x → degrees lon from the map center
+      uDegZ: { value: -1 / P.zPerDeg },      // world z → degrees lat
       uLava: { value: LAVA_OFF },            // lava-flood level in km of real elevation
     },
     vertexShader: /* glsl */ `
@@ -450,7 +464,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         fog = max(fog * fog * (3.0 - 2.0 * fog), smoothstep(0.85, 1.0, vEdge));
         // horizon: where the line of sight skims the curved surface, let it melt into the
         // background instead of ending in a bright silhouette (planet normal, relief ignored)
-        vec3 planetN = normalize(vWorld - vec3(0.0, -${CURVE_R.toFixed(1)}, 0.0));
+        vec3 planetN = normalize(vWorld - vec3(0.0, -${P.curveR.toFixed(1)}, 0.0));
         float graze = dot(planetN, normalize(cameraPosition - vWorld));
         fog = max(fog, 1.0 - smoothstep(0.02, 0.2, graze));
         gl_FragColor = vec4(mix(col, uFog, fog), 1.0);

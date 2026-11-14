@@ -3,12 +3,12 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import * as THREE from 'three'
 import {
-  applyVerticalScale, LAVA_OFF, latToZ, loadDem, lonToX, makeGridMaterial, REVEAL_MAX, TRUE_UNITS_PER_KM, UNITS_PER_KM,
-  worldToLonLat, type Dem,
+  activePlanet, applyVerticalScale, LAVA_OFF, latToZ, loadDem, lonToX, makeGridMaterial, REVEAL_MAX, trueUnitsPerKm,
+  unitsPerKm, worldToLonLat, type Dem,
 } from "./terrain"
 import { subsolarLon } from './sun'
 import type { Hardware } from '../data/hardware'
-import { features } from '../data/features'
+import { features, marsFeatures } from '../data/features'
 import { STACKED_QUERY } from '../layout'
 import { FeatureProjector, LaserBeams, Traverses } from './overlays'
 
@@ -33,8 +33,6 @@ const MARKER_REF_DIST = 70
 const MARKER_SCALE_MIN = 0.7
 const MARKER_SCALE_MAX = 1.1
 const BG = "#0d0e0d"
-const FOG_NEAR = 60
-const FOG_FAR = 175
 
 // Boot-up sequence (seconds): the grid grows out from the center, then markers
 // ping in one by one in landing order (1966 → 1972).
@@ -78,7 +76,7 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
   onProbe: (hit: ProbeHit | null) => void
 }) {
   const geo = useMemo(() => dem.buildGeometry(), [dem])
-  const mat = useMemo(() => makeGridMaterial(BG, FOG_NEAR, FOG_FAR), [])
+  const mat = useMemo(() => makeGridMaterial(BG, ...activePlanet().fog), [])
   // Uniforms are updated through this ref (per frame / per minute), never via the memoized value.
   const matRef = useRef<THREE.ShaderMaterial | null>(null)
   useEffect(() => {
@@ -89,7 +87,10 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
   // Live Sun: refresh the sub-solar longitude every minute.
   useEffect(() => {
     const update = () => {
-      if (matRef.current) matRef.current.uniforms.uSunLon.value = THREE.MathUtils.degToRad(subsolarLon())
+      // the shader's longitudes are measured from the map center
+      const p = activePlanet()
+      const rel = THREE.MathUtils.euclideanModulo(subsolarLon(new Date(), p.id) - p.lonCenter + 180, 360) - 180
+      if (matRef.current) matRef.current.uniforms.uSunLon.value = THREE.MathUtils.degToRad(rel)
     }
     update()
     const t = setInterval(update, 60_000)
@@ -102,7 +103,7 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
   // True-scale morph: ease dem.unitsPerKm to the target and re-set the mesh heights each frame.
   const morph = useRef<{ from: number; to: number; t0: number | null } | null>(null)
   useEffect(() => {
-    const to = trueScale ? TRUE_UNITS_PER_KM : UNITS_PER_KM
+    const to = trueScale ? trueUnitsPerKm() : unitsPerKm()
     if (to !== dem.unitsPerKm) morph.current = { from: dem.unitsPerKm, to, t0: null }
   }, [trueScale, dem])
   // Lava: ease the shader level toward the target, so switching on makes it rise from the
@@ -220,10 +221,8 @@ function Projector({ dem, positions, els }: {
   return null
 }
 
-// Home views sit *inside* the map, framed on the hardware (sites span lon −43°…+31°, lat −41°…+26°),
-// so terrain always runs past every screen edge — the end of the map is never in view.
-const HOME = { pos: [-4, 50, 58] as const, target: [-4, -3, 0] as const }
-const HOME_PORTRAIT = { pos: [-4, 90, 16] as const, target: [-4, 0, 2] as const }
+// Home views (planets.ts) sit *inside* the map, framed on the hardware, so terrain always
+// runs past every screen edge — the end of the map is never in view.
 
 function CameraRig({ selectedId, positions }: { selectedId: string | null; positions: Map<string, Vec3> }) {
   const controls = useRef<CameraControls>(null)
@@ -256,23 +255,27 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
     const p = selectedId ? positions.get(selectedId) : undefined
     const k = portrait ? 1.2 : 1
     if (p) c.setLookAt(p[0] + 8 * k, p[1] + 14 * k, p[2] + 16 * k, p[0], p[1], p[2], true)
-    else if (portrait) c.setLookAt(...HOME_PORTRAIT.pos, ...HOME_PORTRAIT.target, true)
-    else c.setLookAt(...HOME.pos, ...HOME.target, true)
+    else {
+      const { home, portrait: top } = activePlanet().camera
+      const v = portrait ? top : home
+      c.setLookAt(...v.pos, ...v.target, true)
+    }
   }, [selectedId, positions, portrait])
-  // Keep both the target AND the camera itself inside a box over the plateau (±74 × ±55),
+  // Keep both the target AND the camera itself inside a box over the plateau,
   // so you can never pan, orbit or zoom out far enough to see where the map ends.
   useEffect(() => {
     const c = controls.current
     if (!c) return
     c.boundaryEnclosesCamera = true
-    c.setBoundary(new THREE.Box3(new THREE.Vector3(-48, -20, -46), new THREE.Vector3(48, 95, 58)))
+    const { min, max } = activePlanet().camera.box
+    c.setBoundary(new THREE.Box3(new THREE.Vector3(...min), new THREE.Vector3(...max)))
     c.boundaryFriction = 0.15
   }, [])
   return (
     <CameraControls
       ref={controls}
       minDistance={10}
-      maxDistance={95}
+      maxDistance={activePlanet().camera.maxDistance}
       // desktop can't tilt fully top-down; phones keep their top-down home view
       minPolarAngle={portrait ? 0 : Math.PI * 0.2}
       // stay above the horizon, and only swing ±40° left/right (no looking at the sides or back)
@@ -283,15 +286,19 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
   )
 }
 
+/** Key this component by planet: it reads the active planet (terrain.ts) once per mount. */
 export default function MoonScene({ items, selectedId, onSelect, trueScale, lavaLevel }: Props) {
+  const planet = activePlanet()
+  const isMoon = planet.id === 'moon'
+  const feats = isMoon ? features : marsFeatures
   const [dem, setDem] = useState<Dem | null>(null)
   useEffect(() => {
     let alive = true
-    loadDem().then((d) => { if (alive) setDem(d) }, (e) => console.error("Failed to load lunar elevation data", e))
+    loadDem().then((d) => { if (alive) setDem(d) }, (e) => console.error(`Failed to load elevation data for ${planet.label}`, e))
     return () => { alive = false }
-  }, [])
+  }, [planet])
   const positions = useMemo(
-    () => layout(items, dem, trueScale ? TRUE_UNITS_PER_KM : UNITS_PER_KM),
+    () => layout(items, dem, trueScale ? trueUnitsPerKm() : unitsPerKm()),
     [items, dem, trueScale],
   )
   const els = useRef(new Map<string, HTMLElement>())
@@ -333,26 +340,26 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
   return (
     <div className="moon">
       <Canvas
-        camera={{ position: [...HOME.pos], fov: 40, near: 0.1, far: 600 }}
+        camera={{ position: [...planet.camera.home.pos], fov: 40, near: 0.1, far: 600 }}
         onPointerMissed={() => onSelect(null)}
         dpr={[1, 2]}
       >
         <color attach="background" args={[BG]} />
-        <fog attach="fog" args={[BG, FOG_NEAR, FOG_FAR]} />
+        <fog attach="fog" args={[BG, ...planet.fog]} />
         {dem && <Terrain dem={dem} trueScale={trueScale} lavaLevel={lavaLevel} onProbe={onProbe} />}
         <ProbeCross crossRef={probeCross} />
         {dem && polesOn && <Poles dem={dem} positions={positions} />}
         {dem && polesOn && reflectors.length > 0 && <LaserBeams dem={dem} anchors={reflectors} />}
-        {dem && polesOn && <Traverses dem={dem} visibleRovers={rovers} highlightMission={selectedMission} />}
+        {dem && polesOn && isMoon && <Traverses dem={dem} visibleRovers={rovers} highlightMission={selectedMission} />}
         {dem && <Projector dem={dem} positions={positions} els={els} />}
-        {dem && <FeatureProjector dem={dem} features={features} els={featureEls} />}
+        {dem && <FeatureProjector dem={dem} features={feats} els={featureEls} />}
         <CameraRig selectedId={selectedId} positions={positions} />
       </Canvas>
 
       <div className="probe" ref={probeLabel} style={{ display: 'none' }} aria-hidden />
 
       <div className={`features${dem ? ' is-on' : ''}`} aria-hidden>
-        {features.map((f) => (
+        {feats.map((f) => (
           <span
             key={f.name}
             ref={(el) => { if (el) featureEls.current.set(f.name, el); else featureEls.current.delete(f.name) }}

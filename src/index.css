@@ -74,6 +74,15 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .nav li button:hover { color: var(--dim); }
 .nav li button.is-on { color: var(--text); }
 .nav__soon { margin-top: 18px; color: var(--faint); font-size: 9px; }
+.planet-switch { margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--line); display: flex; gap: 12px; }
+.planet-switch button { font: 13px/1.2 var(--display); letter-spacing: -0.04em; color: var(--faint); transition: color .15s; }
+.planet-switch button:hover { color: var(--dim); }
+.planet-switch button.is-on { color: var(--text); }
+.planet-switch + .nav__soon { margin-top: 8px; }
+
+/* bottom-row stand-ins for Moon-only panels while Mars is shown */
+.later p { color: var(--dim); font-size: 11px; line-height: 1.5; margin-top: 4px; }
+.later button { margin-top: 10px; color: var(--text); font-size: 10px; letter-spacing: .06em; border-bottom: 1px solid var(--line-strong); }
 
 /* stepped skyline under the stacked nav — only shown in the stacked layout */
 .nav__edge { display: none; }
@@ -273,6 +282,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .nav li button.is-on { border-color: var(--line-strong); background: #1a1b19; color: var(--text); }
   .nav__soon { display: none; }
   .nav { z-index: 6; }
+  .planet-switch { margin: 10px 0 4px; padding-top: 10px; }
+  .planet-switch button { border: 1px solid var(--line); padding: 7px 10px; color: var(--dim); }
+  .planet-switch button.is-on { border-color: var(--line-strong); background: #1a1b19; color: var(--text); }
   .nav__edge { display: block; position: absolute; left: 0; right: 0; top: 100%; width: 100%; height: 18px; pointer-events: none; }
   .nav__edge-fill { fill: var(--bg); }
   .nav__edge-line { fill: none; stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }

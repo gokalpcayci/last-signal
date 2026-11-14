@@ -4,6 +4,8 @@ import Globe from './ui/Globe'
 import { STACKED_QUERY } from './layout'
 import SunNow from './ui/SunNow'
 import { hardware, kindLabel, type HardwareKind } from './data/hardware'
+import { marsHardware } from './data/mars'
+import { PLANETS, type PlanetId } from './scene/planets'
 import {
   IconArrowRight, IconFilter, IconChevronLeft, IconChevronRight, IconCompass,
   IconPulse, IconShuffle,
@@ -12,7 +14,7 @@ import NavEdge from './ui/NavEdge'
 import { LedLogo } from './ui/LedLogo'
 import SignalChart, { ARRIVAL_ORDER, arrivedCount } from './ui/SignalChart'
 import StrandedGame from './ui/StrandedGame'
-import { EXAGGERATION } from './scene/terrain'
+import { exaggeration, setPlanet } from './scene/terrain'
 
 // near-side LOLA elevations run −5.6 … +5.6 km (median −1.3)
 const LAVA_MIN_KM = -5.6
@@ -27,7 +29,14 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'science', label: 'Science stations' },
   { id: 'reflector', label: 'Laser mirrors' },
   { id: 'robot', label: 'Robot landers' },
+  { id: 'helicopter', label: 'Helicopters' },
 ]
+const HARDWARE: Record<PlanetId, typeof hardware> = { moon: hardware, mars: marsHardware }
+/** Where the "start the tour" buttons fly to */
+const START: Record<PlanetId, { id: string; label: string }> = {
+  moon: { id: 'a11-lm', label: 'Apollo 11' },
+  mars: { id: 'viking-1', label: 'Viking 1' },
+}
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
 const ROWS = ['1', '2', '3', '4', '5']
 
@@ -50,6 +59,12 @@ const fmtDate = (s: string) =>
     : s
 
 export default function App() {
+  const [planet, setPlanetId] = useState<PlanetId>('moon')
+  // terrain.ts reads the active body; set it before any child renders (scene + globe are keyed by planet)
+  setPlanet(planet)
+  const P = PLANETS[planet]
+  const list = HARDWARE[planet]
+  const start = START[planet]
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [navOpen, setNavOpen] = useState(false)
@@ -67,6 +82,17 @@ export default function App() {
   // Lava flood (km of real elevation); null = off. −1.6 km fills roughly the maria.
   const [lava, setLava] = useState<number | null>(null)
   const currentFilter = FILTERS.find((f) => f.id === filter)?.label ?? 'All hardware'
+  // only offer filters for kinds this body actually has
+  const filters = FILTERS.filter((f) => f.id === 'all' || list.some((h) => h.kind === f.id))
+  const switchPlanet = (id: PlanetId) => {
+    if (id === planet) return
+    setPlanetId(id)
+    setSelectedId(null)
+    setFilter('all')
+    setUntil(null)
+    setLava(null)
+    setNavOpen(false)
+  }
   const rightRef = useRef<HTMLElement>(null)
 
   // Stacked (phone) layout: the story sits below the 3D view. Let the camera fly first, then bring the story into view.
@@ -76,14 +102,15 @@ export default function App() {
     return () => clearTimeout(t)
   }, [selectedId])
 
-  // time travel: only what had landed by the playhead (keyed by count, so scrolling within a gap doesn't rebuild the scene)
-  const landed = until == null ? ARRIVAL_ORDER.length : arrivedCount(until)
+  // time travel: only what had landed by the playhead (keyed by count, so scrolling within a gap doesn't rebuild the scene).
+  // The timeline chart is Moon-only for now, so Mars shows everything.
+  const landed = until == null || planet !== 'moon' ? ARRIVAL_ORDER.length : arrivedCount(until)
   const items = useMemo(() => {
-    const ok = new Set(ARRIVAL_ORDER.slice(0, landed))
-    return hardware.filter((h) => (filter === 'all' || h.kind === filter) && ok.has(h.id))
-  }, [filter, landed])
-  const selected = hardware.find((h) => h.id === selectedId) ?? null
-  const active = hardware.filter((h) => h.status === 'active').length
+    const ok = planet === 'moon' ? new Set(ARRIVAL_ORDER.slice(0, landed)) : null
+    return list.filter((h) => (filter === 'all' || h.kind === filter) && (!ok || ok.has(h.id)))
+  }, [filter, landed, list, planet])
+  const selected = list.find((h) => h.id === selectedId) ?? null
+  const active = list.filter((h) => h.status === 'active').length
 
   return (
     <div className="page">
@@ -102,7 +129,7 @@ export default function App() {
         </div>
 
         <div className="scene">
-          <MoonScene items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} />
+          <MoonScene key={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} />
         </div>
 
         {/* top-left: logo + nav */}
@@ -117,7 +144,7 @@ export default function App() {
           <div className="nav__drawer" id="nav-filters">
             <div className="nav__drawer-inner">
               <ul>
-                {FILTERS.map((f, i) => (
+                {filters.map((f, i) => (
                   <li key={f.id} style={{ '--i': i } as React.CSSProperties}>
                     <button className={filter === f.id ? 'is-on' : ''} onClick={() => { setFilter(f.id); setSelectedId(null); setNavOpen(false) }}>
                       {filter === f.id ? `[${f.label.toUpperCase()}]` : f.label.toUpperCase()}
@@ -125,7 +152,14 @@ export default function App() {
                   </li>
                 ))}
               </ul>
-              <div className="nav__soon">MARS · DEEP SPACE — SOON</div>
+              <div className="planet-switch" role="group" aria-label="Choose a world">
+                {(Object.keys(PLANETS) as PlanetId[]).map((id) => (
+                  <button key={id} className={planet === id ? 'is-on' : ''} aria-pressed={planet === id} onClick={() => switchPlanet(id)}>
+                    {planet === id ? `[${PLANETS[id].label.toUpperCase()}]` : PLANETS[id].label.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <div className="nav__soon">DEEP SPACE — SOON</div>
             </div>
           </div>
           <NavEdge />
@@ -147,7 +181,7 @@ export default function App() {
                 <dt>Last signal</dt><dd>{fmtDate(selected.lastSignal)}</dd>
                 <dt>Coords</dt><dd>{selected.lat.toFixed(2)}°, {selected.lon.toFixed(2)}°</dd>
               </dl>
-              <SunNow lat={selected.lat} lon={selected.lon} name={selected.mission} />
+              <SunNow lat={selected.lat} lon={selected.lon} name={selected.mission} body={planet} />
               <p>{selected.story}</p>
               <div className="dyk"><span>DID YOU KNOW?</span>{selected.didYouKnow}</div>
               <a href={selected.source} target="_blank" rel="noreferrer">NASA RECORD →</a>
@@ -156,13 +190,13 @@ export default function App() {
             <>
               <div className="stat">
                 <div>
-                  <div className="stat__num">{hardware.length}<small> objects</small></div>
-                  <div className="stat__label">Left on the Moon</div>
+                  <div className="stat__num">{list.length}<small> objects</small></div>
+                  <div className="stat__label">Left on {P.name}</div>
                 </div>
-                <Gauge value={active / hardware.length} />
+                <Gauge value={active / list.length} />
               </div>
-              <button className="view" onClick={() => setSelectedId('a11-lm')}>Start at Apollo 11 <IconArrowRight /></button>
-              <Globe items={items} selectedId={selectedId} />
+              <button className="view" onClick={() => setSelectedId(start.id)}>Start at {start.label} <IconArrowRight /></button>
+              <Globe key={planet} items={items} selectedId={selectedId} />
             </>
           )}
         </section>
@@ -179,20 +213,20 @@ export default function App() {
             setSelectedId(items[(i + 1) % items.length]?.id ?? null)
           }}><IconChevronRight /></button>
           <button title="Random" aria-label="Random" onClick={() => setSelectedId(items[Math.floor(Math.random() * items.length)]?.id ?? null)}><IconShuffle /></button>
-          <button title="Start tour at Apollo 11" aria-label="Start tour" className={selectedId ? 'is-on' : ''} onClick={() => setSelectedId('a11-lm')}><IconCompass /></button>
+          <button title={`Start tour at ${start.label}`} aria-label="Start tour" className={selectedId ? 'is-on' : ''} onClick={() => setSelectedId(start.id)}><IconCompass /></button>
           <button
             className={`toolbar__scale${trueScale ? ' is-on' : ''}`}
             aria-pressed={trueScale}
-            title={trueScale ? 'True scale: the Moon is really this flat' : `Mountains are stretched ×${EXAGGERATION} so you can see them. Click for true scale`}
+            title={trueScale ? `True scale: ${P.name} is really this flat` : `Mountains are stretched ×${exaggeration()} so you can see them. Click for true scale`}
             onClick={() => setTrueScale((v) => !v)}
-          >{trueScale ? '1:1' : `×${EXAGGERATION}`}</button>
-          <button
+          >{trueScale ? '1:1' : `×${exaggeration()}`}</button>
+          {planet === 'moon' && <button
             className={`toolbar__scale toolbar__lava${lava !== null ? ' is-on' : ''}`}
             aria-pressed={lava !== null}
             title="Lava flood: see how the dark “seas” formed"
             onClick={() => setLava((v) => (v === null ? LAVA_DEFAULT_KM : null))}
-          >LAVA</button>
-          {lava !== null && (
+          >LAVA</button>}
+          {planet === 'moon' && lava !== null && (
             <div className="lava">
               <div className="lava__head">
                 <span>LAVA LEVEL</span>
@@ -210,7 +244,13 @@ export default function App() {
 
         {/* bottom row */}
         <section className="bottom">
-          <StrandedGame onSelect={setSelectedId} />
+          {planet === 'moon' ? <StrandedGame onSelect={setSelectedId} /> : (
+            <div className="panel later">
+              <div className="panel__title">Stranded <span className="game__tag">[STORY]</span></div>
+              <p>Leo’s adventure happens on the Moon.</p>
+              <button onClick={() => switchPlanet('moon')}>PLAY ON THE MOON →</button>
+            </div>
+          )}
 
           <div className="panel radar">
             <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />
@@ -221,7 +261,12 @@ export default function App() {
             </div>
           </div>
 
-          <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
+          {planet === 'moon' ? <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} /> : (
+            <div className="panel later">
+              <div className="panel__title">Signal timeline</div>
+              <p>Mars timeline coming next — 1976 → today, Viking to Perseverance.</p>
+            </div>
+          )}
         </section>
       </div>
     </div>

@@ -1,5 +1,5 @@
 export type HardwareStatus = 'active' | 'silent'
-export type HardwareKind = 'lander' | 'rover' | 'science' | 'reflector' | 'robot'
+export type HardwareKind = 'lander' | 'rover' | 'science' | 'reflector' | 'robot' | 'helicopter'
 
 export interface Hardware {
   id: string
@@ -216,4 +216,5 @@ export const kindLabel: Record<HardwareKind, string> = {
   science: 'Science station',
   reflector: 'Laser mirror',
   robot: 'Robotic lander',
+  helicopter: 'Helicopter',
 }

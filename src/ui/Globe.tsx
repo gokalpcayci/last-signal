@@ -1,26 +1,28 @@
 import { useEffect, useState } from 'react'
 import type { Hardware } from '../data/hardware'
-import { loadDem } from '../scene/terrain'
+import { activePlanet, loadDem } from '../scene/terrain'
 
 type LatLon = [number, number]
 
 /** Maria (dark lunar "seas") are low basins — pick DEM points well below the mean surface. */
+/** Dots on low ground: the Moon's maria, Mars's northern lowlands and basins (planets.ts → globe). */
 function mariaPoints(metersAt: (lon: number, lat: number) => number): LatLon[] {
+  const { belowM, lonMin, lonMax, step } = activePlanet().globe
   const pts: LatLon[] = []
-  for (let lat = -70; lat <= 70; lat += 3)
-    for (let lon = -90; lon <= 90; lon += 3)
-      if (metersAt(lon, lat) < -1700) pts.push([lat, lon])
+  for (let lat = -70; lat <= 70; lat += step)
+    for (let lon = lonMin; lon <= lonMax; lon += step)
+      if (metersAt(lon, lat) < belowM) pts.push([lat, lon])
   return pts
 }
 
-/** Slowly rotating orthographic wireframe Moon with maria and hardware sites. */
+/** Slowly rotating orthographic wireframe globe (active planet) with low ground and hardware sites. Key it by planet. */
 export default function Globe({ items, selectedId }: { items: Hardware[]; selectedId: string | null }) {
   const [rot, setRot] = useState(0)
   const [maria, setMaria] = useState<LatLon[]>([])
 
   useEffect(() => {
     let alive = true
-    loadDem().then((d) => { if (alive) setMaria(mariaPoints(d.metersAt)) }, (e) => console.error('Globe: failed to load lunar elevation data', e))
+    loadDem().then((d) => { if (alive) setMaria(mariaPoints(d.metersAt)) }, (e) => console.error('Globe: failed to load elevation data', e))
     return () => { alive = false }
   }, [])
 

@@ -1,0 +1,14 @@
+{
+  "source": "NASA MGS MOLA MEGDR megt90n000cb (PDS Geosciences Node) \u2014 https://pds-geosciences.wustl.edu/mgs/mgs-m-mola-5-megdr-l3-v1/",
+  "width": 752,
+  "height": 352,
+  "ppd": 2,
+  "lonCenter": -145.0,
+  "lonMin": -188.0,
+  "lonMax": 188.0,
+  "latMin": -88.0,
+  "latMax": 88.0,
+  "encoding": "uint16 LE, half-meters, offset 20000, row 0 = latMax",
+  "minMeters": -7696.0,
+  "maxMeters": 20930.0
+}

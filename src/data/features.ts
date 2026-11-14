@@ -1,7 +1,7 @@
 /** Named surface features shown as map labels (IAU Gazetteer of Planetary Nomenclature center coords). */
 export interface Feature {
   name: string
-  kind: 'mare' | 'crater' | 'mountains'
+  kind: 'mare' | 'crater' | 'mountains'  // Mars: plains/basins use 'mare', volcanoes/canyons 'mountains'
   lat: number
   lon: number
 }
@@ -16,4 +16,14 @@ export const features: Feature[] = [
   { name: 'Montes Apenninus', kind: 'mountains', lat: 18.9, lon: -3.7 },
   { name: 'Copernicus', kind: 'crater', lat: 9.62, lon: -20.08 },
   { name: 'Tycho', kind: 'crater', lat: -43.31, lon: -11.36 },
+]
+
+/** Mars labels (IAU Gazetteer center coords, lon east −180…180). */
+export const marsFeatures: Feature[] = [
+  { name: 'Olympus Mons', kind: 'mountains', lat: 18.65, lon: -133.8 },
+  { name: 'Valles Marineris', kind: 'mountains', lat: -13.9, lon: -59.2 },
+  { name: 'Elysium Mons', kind: 'mountains', lat: 25.02, lon: 147.21 },
+  { name: 'Hellas Planitia', kind: 'mare', lat: -42.4, lon: 70.5 },
+  { name: 'Utopia Planitia', kind: 'mare', lat: 46.7, lon: 117.5 },
+  { name: 'Argyre Planitia', kind: 'mare', lat: -49.7, lon: -44.0 },
 ]
