@@ -166,27 +166,6 @@ function ProbeCross({ crossRef }: { crossRef: React.Ref<THREE.Mesh> }) {
   )
 }
 
-/** Marker stems. Heights follow the live terrain (true-scale morph), so they're set per frame. */
-function Poles({ dem, positions }: { dem: Dem; positions: Map<string, Vec3> }) {
-  const refs = useRef(new Map<string, THREE.Mesh>())
-  useFrame(() => {
-    for (const [id, p] of positions) {
-      const m = refs.current.get(id)
-      if (m) m.position.set(p[0], dem.heightAt(p[0], p[2]) + MARKER_LIFT / 2, p[2])
-    }
-  })
-  return (
-    <>
-      {[...positions].map(([id]) => (
-        <mesh key={id} ref={(m) => { if (m) refs.current.set(id, m); else refs.current.delete(id) }}>
-          <cylinderGeometry args={[0.03, 0.03, MARKER_LIFT]} />
-          <meshBasicMaterial color="#d8d8d0" />
-        </mesh>
-      ))}
-    </>
-  )
-}
-
 /**
  * Projects each marker's 3D anchor to screen space every frame and moves the
  * matching DOM button. Plain DOM (not drei <Html>) avoids nested React roots.
@@ -198,6 +177,7 @@ function Projector({ dem, positions, els }: {
 }) {
   const { camera, size } = useThree()
   const v = useMemo(() => new THREE.Vector3(), [])
+  const base = useMemo(() => new THREE.Vector3(), [])
   const lastScale = useRef(new Map<string, string>())
   useFrame(() => {
     // CameraControls moves the camera (priority −1) but doesn't refresh its matrices — three.js
@@ -206,16 +186,21 @@ function Projector({ dem, positions, els }: {
     for (const [id, p] of positions) {
       const el = els.current.get(id)
       if (!el) continue
-      v.set(p[0], dem.heightAt(p[0], p[2]) + MARKER_LIFT, p[2])
+      const ground = dem.heightAt(p[0], p[2])
+      v.set(p[0], ground + MARKER_LIFT, p[2])
       // glyph scale by camera distance (--mk-s, used by .marker__ink); only touch the DOM on change
       const s = THREE.MathUtils.clamp(MARKER_REF_DIST / camera.position.distanceTo(v), MARKER_SCALE_MIN, MARKER_SCALE_MAX).toFixed(2)
       if (lastScale.current.get(id) !== s) { el.style.setProperty('--mk-s', s); lastScale.current.set(id, s) }
       v.project(camera)
+      base.set(p[0], ground, p[2]).project(camera)
       const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1
       el.style.display = visible ? '' : 'none'
       if (visible) {
-        const x = (v.x * 0.5 + 0.5) * size.width
-        const y = (-v.y * 0.5 + 0.5) * size.height
+        // whole pixels: keeps the pixel stem crisp (no half-pixel blur)
+        const x = Math.round((v.x * 0.5 + 0.5) * size.width)
+        const y = Math.round((-v.y * 0.5 + 0.5) * size.height)
+        const yBase = Math.round((-base.y * 0.5 + 0.5) * size.height)
+        el.style.setProperty('--stem', `${Math.max(0, yBase - y)}px`)
         el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`
         el.style.zIndex = String(Math.round((1 - v.z) * 10000))
       }
@@ -332,7 +317,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
     const sorted = [...items].sort((a, b) => a.arrived.localeCompare(b.arrived))
     return new Map(sorted.map((h, i) => [h.id, i]))
   }, [items])
-  // Poles appear with the first markers, once the grid has mostly grown in.
+  // Beams and trails appear with the first markers, once the grid has mostly grown in.
   const [polesOn, setPolesOn] = useState(false)
   const booted = useBooted()
   useEffect(() => {
@@ -352,7 +337,6 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
         <fog attach="fog" args={[BG, ...planet.fog]} />
         {dem && <Terrain dem={dem} trueScale={trueScale} lavaLevel={lavaLevel} onProbe={onProbe} />}
         <ProbeCross crossRef={probeCross} />
-        {dem && polesOn && <Poles dem={dem} positions={positions} />}
         {dem && polesOn && reflectors.length > 0 && <LaserBeams dem={dem} anchors={reflectors} />}
         {dem && polesOn && isMoon && <Traverses dem={dem} visibleRovers={rovers} highlightMission={selectedMission} />}
         {dem && <Projector dem={dem} positions={positions} els={els} />}
@@ -384,8 +368,8 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
             data-label={`${h.mission.toUpperCase()} · ${h.name}`}
             style={{ display: 'none', '--ping-delay': `${BOOT_MARKERS_START_S + (order.get(h.id) ?? 0) * BOOT_MARKER_STEP_S}s` } as React.CSSProperties}
           >
-            <span className="marker__ping" aria-hidden />
             <span className="marker__ink" />
+            <span className="marker__stem" aria-hidden />
           </button>
         ))}
       </div>

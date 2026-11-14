@@ -1,0 +1,8 @@
+/* Nav filter toggle (LED). Never set `display` here: index.css shows .nav__toggle only in the stacked layout.
+   Untiled like the logo — the fading ghost LEDs are the button's edge. Two classes beat the stacked 32×32 box. */
+.nav__toggle.menu-btn { width: auto; height: auto; min-width: 32px; min-height: 32px; padding: 4px;
+  place-items: center; background: none; border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform .12s; }
+.nav__toggle.menu-btn:active { transform: translateY(1px); }
+.nav__toggle.menu-btn:focus-visible { outline: 1px dashed var(--ok); outline-offset: 2px; }
+.nav__toggle.menu-btn canvas { display: block; }

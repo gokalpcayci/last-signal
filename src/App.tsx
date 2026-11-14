@@ -7,10 +7,11 @@ import { hardware, kindLabel, type HardwareKind } from './data/hardware'
 import { marsHardware } from './data/mars'
 import { PLANETS, type PlanetId } from './scene/planets'
 import {
-  IconArrowRight, IconFilter, IconChevronLeft, IconChevronRight, IconCompass,
+  IconArrowRight, IconChevronLeft, IconChevronRight, IconCompass,
   IconPulse, IconShuffle,
 } from './ui/icons'
 import NavEdge from './ui/NavEdge'
+import MenuButton from './ui/MenuButton'
 import { LedLogo } from './ui/LedLogo'
 import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
@@ -140,9 +141,9 @@ export default function App() {
           <div className="nav__bar">
             <LedLogo className="logo" width={stacked ? 56 : 84} />
             {/* phones: one compact row; tap to expand the filter row */}
-            <button className="nav__toggle" aria-expanded={navOpen} aria-controls="nav-filters" aria-label={`Filter hardware (now: ${currentFilter})`} title={currentFilter} onClick={() => setNavOpen((o) => !o)}>
-              <IconFilter />
-            </button>
+            <MenuButton open={navOpen} onToggle={() => setNavOpen((o) => !o)} controls="nav-filters"
+              filter={filter} label={currentFilter}
+              pitch={((stacked ? 56 : 84) * 16) / 768 /* = the nav logo's LED pitch */} />
           </div>
           <div className="nav__drawer" id="nav-filters">
             <div className="nav__drawer-inner">

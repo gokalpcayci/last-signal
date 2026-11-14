@@ -1,4 +1,4 @@
-import { LED_GRIDS } from './ledCells'
+import { LED_GRIDS, type LedGrid } from './ledCells'
 
 /**
  * Canvas renderer for the animated LED-matrix Lostronomy mark.
@@ -16,6 +16,10 @@ import { LED_GRIDS } from './ledCells'
  *
  * On top of that a glitch layer fires short signal faults (row tear, static band,
  * colour split, brownout) and keeps a few dead pixels stuttering.
+ *
+ * Other pictures: pass your own `grid` (e.g. a full LED panel) and call `setMask()` to
+ * light a subset of it. Changing the mask morphs with the intro's flicker + flash, so
+ * UI glyphs drawn on the panel feel like the same device as the logo.
  */
 
 export type LedMode = 'random' | 'boot' | 'scan'
@@ -23,7 +27,7 @@ export type LedPhase = 'intro' | 'outro' | 'loop' | 'ambient' | 'still' | 'off'
 export type GlitchKind = 'tear' | 'static' | 'split' | 'brownout'
 
 export interface LedOptions {
-  grid?: 'fine' | 'coarse'
+  grid?: 'fine' | 'coarse' | LedGrid
   mode?: LedMode
   ink?: string       // lit LED colour
   accent?: string    // signal colour (green: still active)
@@ -32,15 +36,17 @@ export interface LedOptions {
   glitch?: number    // 0 = off, 1 = default, 2 = chaotic
   speed?: number     // 1 = default tempo
   ghost?: number     // brightness of an unlit LED (0..1)
+  ghostFade?: boolean // grid depth fades the unlit LEDs instead of shading lit ones (soft-edged UI panels)
 }
 
 interface Cell {
-  x: number; y: number; row: number; base: number; depth: number; rnd: number
+  x: number; y: number; row: number; base: number; depth: number; rnd: number; ghostK: number
   arrive: Record<LedMode, number>
 }
 interface Glitch { kind: GlitchKind; t0: number; dur: number; r0: number; r1: number; dx: number }
 
 const INTRO_S = 1.6   // intro/outro length in seconds (at speed 1)
+const MORPH_S = 0.5   // setMask() transition length
 const LOOP_S: Record<LedMode, number> = { random: 1.7, boot: 1.8, scan: 2.4 }
 const AMBIENT_SLOWDOWN = 2.2
 
@@ -71,13 +77,18 @@ export class LedEngine {
   private bright = new Float32Array(0)
   private hot = new Float32Array(0)
   private dx = new Float32Array(0)
+  // mask: per-cell brightness scale (0 = unlit ghost). Morphs from maskFrom over MORPH_S.
+  private mask = new Float32Array(0)
+  private maskFrom = new Float32Array(0)
+  private morphT0 = -Infinity
+  private morphMode: LedMode = 'boot'
   private reduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
   constructor(canvas: HTMLCanvasElement, opts: LedOptions = {}) {
     this.canvas = canvas
     this.opts = {
       grid: 'fine', mode: 'random', ink: '#e6e6df', accent: '#5fd068', warn: '#e56b47',
-      signals: true, glitch: 1, speed: 1, ghost: 0.07, ...opts,
+      signals: true, glitch: 1, speed: 1, ghost: 0.07, ghostFade: false, ...opts,
     }
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('LedEngine: 2D canvas not available')
@@ -86,7 +97,7 @@ export class LedEngine {
   }
 
   private load() {
-    const g = LED_GRIDS[this.opts.grid]
+    const g = typeof this.opts.grid === 'string' ? LED_GRIDS[this.opts.grid] : this.opts.grid
     this.step = g.step
     this.vb = g.viewBox
     const raw = g.cells
@@ -104,7 +115,8 @@ export class LedEngine {
       this.cells.push({
         x, y, depth, rnd,
         row: Math.round((y - yMin) / this.step),
-        base: 0.6 + 0.4 * Math.sqrt(depth),
+        base: this.opts.ghostFade ? 1 : 0.6 + 0.4 * Math.sqrt(depth),
+        ghostK: this.opts.ghostFade ? depth : 1,
         arrive: {
           random: hash(i * 3.17 + 9.1),
           scan: (y - yMin) / (yMax - yMin),
@@ -113,6 +125,9 @@ export class LedEngine {
       })
     }
     this.bright = new Float32Array(n)
+    this.mask = new Float32Array(n).fill(1)
+    this.maskFrom = new Float32Array(n).fill(1)
+    this.morphT0 = -Infinity
     this.hot = new Float32Array(n)
     this.dx = new Float32Array(n)
   }
@@ -182,6 +197,38 @@ export class LedEngine {
     this.kick()
   }
 
+  /** Light a subset of the grid (values 0..1 scale each LED; 0 = ghost). Morphs unless `instant`. */
+  setMask(values: ArrayLike<number>, { instant = false, mode = 'boot' as LedMode } = {}) {
+    const now = performance.now()
+    const m = this.morphP(now)
+    // start from what is on screen right now (handles a morph interrupted mid-way)
+    for (let i = 0; i < this.mask.length; i++) {
+      this.maskFrom[i] = m < 1.3 ? this.maskAt(i, m).v : this.mask[i]
+      this.mask[i] = values[i] ?? 0
+    }
+    this.morphMode = mode
+    this.morphT0 = instant || this.reduced ? -Infinity : now
+    this.kick()
+  }
+
+  private morphP(now: number) {
+    return (((now - this.morphT0) / 1000) * this.opts.speed / MORPH_S) * 1.15
+  }
+
+  /** Mask value of cell i at morph progress p, plus its transition flash. */
+  private maskAt(i: number, p: number): { v: number; hot: number } {
+    const to = this.mask[i], from = this.maskFrom[i]
+    if (p >= 1.3 || to === from) return { v: to, hot: 0 }
+    const c = this.cells[i]
+    const since = p - c.arrive[this.morphMode]
+    if (since <= 0) return { v: from, hot: 0 }
+    const turningOn = to > 0 && from === 0, turningOff = to === 0 && from > 0
+    let v = to
+    if ((turningOn || turningOff) && since < 0.12) v = frac(since * 37 + c.rnd) > 0.45 ? Math.max(to, from) : Math.min(to, from) * 0.3
+    const hot = turningOn ? Math.exp(-since / 0.07) : turningOff ? 0.6 * Math.exp(-since / 0.05) : 0
+    return { v, hot }
+  }
+
   destroy() {
     cancelAnimationFrame(this.raf)
     this.raf = 0
@@ -248,6 +295,8 @@ export class LedEngine {
     const fp = this.flashMode ? (((now - this.flashT0) / 1000) * sp / INTRO_S) * 1.15 : 0
     if (this.flashMode && fp > 1.3) this.flashMode = null
     if (this.flashMode) animating = true
+    const mp = this.morphP(now)
+    if (mp < 1.3) animating = true
 
     // ---- per-pixel brightness ----
     const ambient = this.phase === 'ambient'
@@ -306,7 +355,11 @@ export class LedEngine {
         const since = fp - c.arrive[this.flashMode]
         if (since > 0) hot = Math.max(hot, 0.85 * Math.exp(-since / 0.07))
       }
-      this.bright[i] = ghost + (c.base - ghost) * lit
+      const m = this.maskAt(i, mp)
+      if (m.v <= 0) hot = 0   // unlit LEDs don't join intro/flash waves
+      hot = Math.max(hot, m.hot)
+      const g = ghost * c.ghostK
+      this.bright[i] = g + (c.base - g) * lit * m.v
       this.hot[i] = hot
       this.dx[i] = 0
     }
@@ -390,8 +443,8 @@ export class LedEngine {
     const sg = this.signal
     if (opts.signals && (this.phase === 'loop' || this.phase === 'ambient')) {
       if (now > sg.next) {
-        const deep = cells.map((c, i) => (c.depth > 0.35 ? i : -1)).filter((i) => i >= 0)
-        sg.i = pick(deep)
+        const deep = cells.map((c, i) => (c.depth > 0.35 && this.mask[i] > 0.5 ? i : -1)).filter((i) => i >= 0)
+        sg.i = deep.length ? pick(deep) : -1
         sg.t0 = now
         sg.next = now + (2600 + Math.random() * 2200) / opts.speed
       }
