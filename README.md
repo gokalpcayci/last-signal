@@ -39,6 +39,13 @@ kid-friendly language with a real mission-control feel.
 - three.js via @react-three/fiber + @react-three/drei
 - Static `src/data/hardware.json` as the single content source
 
+## Data sources
+- **Terrain:** NASA LRO Lunar Orbiter Laser Altimeter (LOLA) elevation, via the
+  [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720). Rebuild with
+  `python3 -I scripts/build_dem.py path/to/ldem_16_uint.tif`.
+- **Hardware facts:** [NSSDCA](https://nssdc.gsfc.nasa.gov/) spacecraft records and
+  the challenge resources in `docs/resources.md`.
+
 ## Run
 ```bash
 bun install

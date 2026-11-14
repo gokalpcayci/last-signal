@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { buildTerrainGeometry, heightAt, latToZ, lonToX } from './terrain'
+import { latToZ, loadDem, lonToX, type Dem } from "./terrain"
 import type { Hardware } from '../data/hardware'
 
 interface Props {
@@ -15,24 +15,25 @@ type Vec3 = [number, number, number]
 const MARKER_LIFT = 2.4
 
 /** Hardware at the same site sits within metres of each other — fan them out so markers don't overlap. */
-function layout(items: Hardware[]) {
+function layout(items: Hardware[], dem: Dem | null) {
+  const out = new Map<string, Vec3>()
+  if (!dem) return out
   const bySite = new Map<string, Hardware[]>()
   for (const h of items) bySite.set(h.site, [...(bySite.get(h.site) ?? []), h])
-  const out = new Map<string, Vec3>()
   for (const group of bySite.values()) {
     const cx = lonToX(group[0].lon), cz = latToZ(group[0].lat)
     group.forEach((h, i) => {
       const a = (i / group.length) * Math.PI * 2
       const r = group.length > 1 ? 3.4 : 0
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r
-      out.set(h.id, [x, heightAt(x, z), z])
+      out.set(h.id, [x, dem.heightAt(x, z), z])
     })
   }
   return out
 }
 
-function Terrain() {
-  const geo = useMemo(buildTerrainGeometry, [])
+function Terrain({ dem }: { dem: Dem }) {
+  const geo = useMemo(() => dem.buildGeometry(), [dem])
   return (
     <group>
       {/* dark solid underlay hides wire lines behind hills */}
@@ -111,7 +112,13 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
 }
 
 export default function MoonScene({ items, selectedId, onSelect }: Props) {
-  const positions = useMemo(() => layout(items), [items])
+  const [dem, setDem] = useState<Dem | null>(null)
+  useEffect(() => {
+    let alive = true
+    loadDem().then((d) => { if (alive) setDem(d) }, (e) => console.error("Failed to load lunar elevation data", e))
+    return () => { alive = false }
+  }, [])
+  const positions = useMemo(() => layout(items, dem), [items, dem])
   const els = useRef(new Map<string, HTMLElement>())
 
   return (
@@ -123,7 +130,7 @@ export default function MoonScene({ items, selectedId, onSelect }: Props) {
       >
         <color attach="background" args={['#0d0e0d']} />
         <fog attach="fog" args={['#0d0e0d', 60, 150]} />
-        <Terrain />
+        {dem && <Terrain dem={dem} />}
         <Poles positions={[...positions.values()]} />
         <Projector positions={positions} els={els} />
         <CameraRig selectedId={selectedId} positions={positions} />
