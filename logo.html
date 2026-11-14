@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lostronomy Logo Lab</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg:#0d0e0d; --panel:#141513; --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.16);
+    --text:#e6e6df; --dim:#6e706a; --faint:#3d3f3a; --ok:#5fd068; --mono:'JetBrains Mono',ui-monospace,monospace; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 13px/1.5 var(--mono); display: grid; grid-template-rows: 1fr auto; }
+  .stage { display: grid; place-items: center; padding: 24px 16px; position: relative;
+    background-image: radial-gradient(circle at 50% 45%, #161715 0, var(--bg) 70%); }
+  .stage canvas { max-width: 100%; height: auto; }
+  .wordmark { margin-top: 28px; text-align: center; opacity: 0; transition: opacity .6s; }
+  .wordmark.on { opacity: 1; }
+  .wordmark b { display: block; font: 600 34px Inter, system-ui, sans-serif; letter-spacing: .32em; padding-left: .32em; }
+  .wordmark span { color: var(--dim); font-size: 11px; letter-spacing: .3em; }
+  .corner { position: absolute; font-size: 10px; color: var(--faint); letter-spacing: .14em; }
+  .corner.tl { top: 14px; left: 16px; } .corner.tr { top: 14px; right: 16px; color: var(--dim); }
+  .bar { border-top: 1px dashed var(--line-strong); padding: 14px 16px 18px; display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: end; }
+  .grp { display: grid; gap: 6px; }
+  .grp > span { font-size: 10px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 11px; color: var(--dim); background: var(--panel); border: 1px solid var(--line);
+    padding: 7px 11px; cursor: pointer; letter-spacing: .06em; text-transform: uppercase; }
+  button:hover { color: var(--text); border-color: var(--line-strong); }
+  button.on { color: var(--text); border-color: var(--text); }
+  button.go { color: var(--bg); background: var(--text); border-color: var(--text); }
+  input[type=range] { accent-color: var(--text); width: 120px; }
+  label.chk { display: flex; gap: 6px; align-items: center; color: var(--dim); font-size: 11px; cursor: pointer; }
+  .note { color: var(--faint); font-size: 10px; letter-spacing: .1em; margin-left: auto; align-self: center; }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="corner tl">LOSTRONOMY · LOGO LAB</div>
+    <div class="corner tr" id="status">MODE RANDOM · PHASE —</div>
+    <div>
+      <canvas id="logo"></canvas>
+      <div class="wordmark" id="word"><b>LOSTRONOMY</b><span>ABANDONED · NOT FORGOTTEN</span></div>
+    </div>
+  </div>
+  <div class="bar">
+    <div class="grp"><span>Mode</span><div class="row" id="modes">
+      <button data-mode="random" class="on">Random</button>
+      <button data-mode="boot">Boot-up</button><button data-mode="scan">Scanline</button></div></div>
+    <div class="grp"><span>Play</span><div class="row" id="phases">
+      <button data-phase="intro">Entrance</button><button data-phase="loop">Loop</button>
+      <button data-phase="ambient">Ambient</button><button data-phase="outro">Exit</button>
+      <button data-phase="flash">Flash</button></div></div>
+    <div class="grp"><span>Glitch <b id="glv">1.0</b></span><div class="row" style="align-items:center;gap:10px">
+      <input id="glitch" type="range" min="0" max="2" step="0.1" value="1" />
+      <button id="glitchNow">Tear</button><button data-g="static">Static</button><button data-g="split">Split</button><button data-g="brownout">Brownout</button></div></div>
+    <div class="grp"><span>Sequence</span><div class="row">
+      <button class="go" id="demo">▶ Demo intro</button></div></div>
+    <div class="grp"><span>Speed <b id="spv">1.0×</b></span><input id="speed" type="range" min="0.3" max="2" step="0.1" value="1" /></div>
+    <div class="grp"><span>Options</span><div class="row">
+      <label class="chk"><input type="checkbox" id="signals" checked /> green signal</label>
+      <label class="chk"><input type="checkbox" id="coarse" /> nav grid</label></div></div>
+    <div class="note">Press SPACE to replay the demo intro</div>
+  </div>
+  <script type="module" src="/src/brand/playground.ts"></script>
+</body>
+</html>

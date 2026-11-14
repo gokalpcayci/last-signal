@@ -43,7 +43,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 /* ── nav ─────────────────────────────────── */
 .nav { position: absolute; top: 40px; left: 36px; z-index: 10; font: 10.5px var(--mono); letter-spacing: 0.04em; }
-.logo { display: block; width: 32px; height: 32px; margin-bottom: 18px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+.logo { display: block; margin-bottom: 18px; cursor: default; }
 /* desktop: filter list always visible, no toggle */
 .nav__toggle { display: none; }
 .nav ul { list-style: none; display: grid; gap: 7px; }

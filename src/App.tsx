@@ -8,6 +8,7 @@ import {
   IconArrowRight, IconChevronDown, IconChevronLeft, IconChevronRight, IconCompass,
   IconPulse, IconShuffle, IconSignalOff, IconSignalOk,
 } from './ui/icons'
+import { LedLogo } from './ui/LedLogo'
 
 type Filter = 'all' | HardwareKind
 const FILTERS: { id: Filter; label: string }[] = [
@@ -99,7 +100,7 @@ export default function App() {
         {/* top-left: logo + nav */}
         <aside className={`nav${navOpen ? ' is-open' : ''}`}>
           <div className="nav__bar">
-            <img className="logo" src="/brand/app-icon.svg" alt="Lostronomy" width={32} height={32} />
+            <LedLogo className="logo" width={84} />
             {/* phones: one compact row; tap to expand the filter row */}
             <button className="nav__toggle" aria-expanded={navOpen} aria-controls="nav-filters" onClick={() => setNavOpen((o) => !o)}>
               <span>[{currentFilter.toUpperCase()}]</span>
