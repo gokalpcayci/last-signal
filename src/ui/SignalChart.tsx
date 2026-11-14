@@ -75,6 +75,18 @@ const CLIFF = (() => {
   return hit ? { date: hit[0], t: toYear(hit[0]), count: hit[1] } : null
 })()
 
+// ── event marks for the caption row: each Apollo landing, and the first Surveyor ──
+const MISSION_MARKS: { t: number; label: string }[] = (() => {
+  const seen = new Set<string>(), out: { t: number; label: string }[] = []
+  for (const h of byArrival) {
+    if (seen.has(h.mission)) continue
+    seen.add(h.mission)
+    if (h.mission.startsWith('Apollo')) out.push({ t: ARR.get(h.id)!, label: short(h.mission) })
+    else if (h.mission === 'Surveyor 1') out.push({ t: ARR.get(h.id)!, label: 'SURVEYORS' })
+  }
+  return out
+})()
+
 // ── narration: the latest event at or before the playhead ───────────────────
 const EVENTS: { t: number; text: string }[] = (() => {
   const ev: { t: number; text: string }[] = []
@@ -98,9 +110,13 @@ const GUTTER = 34, PAD = 10
 // ── the printout ────────────────────────────────────────────────────────────
 // One text row per mission:
 //   ▪ landed   = two long traces side by side   - one   : / . the same after going silent (signal decay)
-//   × went quiet   · not recorded yet   │ playhead   ┊ the 1977 shutdown
+//   × went quiet, then a fading afterglow . . .  ·   (abandoned, not forgotten)
+//   · not recorded yet   ▌/│ print head   ┊ the 1977 shutdown   ▼ events, printed once passed
+// Fresh ink: the few columns just behind the print head print brighter.
 // Colours stay status-only: green = still talking at the playhead, orange = silent by then.
-const A_ROWS = ROWS.length + 2 // caption row + one per mission + ruler
+const A_ROWS = ROWS.length + 2 // caption row + one per mission + ruler (the overview bar sits below, outside)
+const GLOW = [1, 2, 4, 7, 11, 16, 22] // afterglow dots: columns after an object went quiet, thinning out
+const INK = 5 // columns of fresh ink behind the print head
 
 interface Run { text: string; cls: string }
 interface AsciiGrid { rows: Run[][]; cols: number }
@@ -130,16 +146,30 @@ function buildAscii(o: {
     return k
   }
 
-  // caption row: the 1977 cliff once passed, and the scale note after the break
+  // caption row: events printed once the playhead has passed them (never overlapping each other)
   const cap = Array<string>(cols).fill(' '), capC = Array<string>(cols).fill('')
-  const put = (txt: string, at: number, k: string) => { for (let i = 0; i < txt.length; i++) if (at + i >= 0 && at + i < cols) { cap[at + i] = txt[i]; capC[at + i] = k } }
+  const put = (txt: string, at: number, k: string) => {
+    if (at < 0 || at + txt.length > cols) return false
+    for (let i = 0; i < txt.length; i++) if (cap[at + i] !== ' ') return false
+    for (let i = 0; i < txt.length; i++) { cap[at + i] = txt[i]; capC[at + i] = k }
+    return true
+  }
+  if (CLIFF && p >= CLIFF.t) { const txt = `${fmtDay(CLIFF.date)} · ${CLIFF.count} STATIONS OFF ▼`; put(txt, colOf(CLIFF.t) - txt.length + 1, 'warn') }
+  if (atNow) put('TODAY ▼', cols - 7, 'ok')
+  for (const m of MISSION_MARKS) if (m.t <= p) put(`▼${m.label}`, colOf(m.t), 'dim') || put('▼', colOf(m.t), 'dim')
   put('1 TICK = 10 YEARS →', colOf(TB) + 2, 'faint')
-  if (CLIFF && p >= CLIFF.t) { const txt = `${fmtDay(CLIFF.date)} · ${CLIFF.count} STATIONS OFF `; put(txt, colOf(CLIFF.t) - txt.length, 'warn') }
   const rows: Run[][] = [toRuns(cap, capC)]
 
   const cliffCol = CLIFF && p >= CLIFF.t ? colOf(CLIFF.t) : -1
   ROWS.forEach((_, ri) => {
     const objs = byArrival.filter((h) => LANE.get(h.id)!.row === ri && ARR.get(h.id)! <= p)
+    // afterglow: column → strength index, from every long trace that has gone quiet
+    const glow = new Map<number, number>()
+    for (const h of objs) {
+      if (LANE.get(h.id)!.lane > 1 || END.get(h.id)! >= p) continue
+      const ec = colOf(END.get(h.id)!)
+      GLOW.forEach((d, gi) => { const c = ec + d; if (!glow.has(c) || glow.get(c)! > gi) glow.set(c, gi) })
+    }
     const chars: string[] = [], cls: string[] = []
     for (let c = 0; c < cols; c++) {
       const a0 = t0(c), a1 = t1(c)
@@ -158,7 +188,12 @@ function buildAscii(o: {
         k = live ? 'ok' : 'warn dim'
         ids = cover.map((h) => h.id)
       } else if (c === cliffCol) { g = '┊'; k = 'warn dim' }
-      if (c === headCol && !atNow) { if (g === ' ') { g = '│'; k = 'head' } else k += ' head' }
+      else if (glow.has(c)) { const gi = glow.get(c)!; g = gi < 3 ? '.' : '·'; k = `warn glow${Math.min(3, Math.floor(gi / 2) + 1)}` }
+      // print head: the pen tip on a live trace, a thin rule elsewhere
+      if (c === headCol && !atNow) {
+        if (g === ' ') { g = '│'; k = 'head' }
+        else { if (cover.some(alive) && !land) g = '▌'; k += ' head' }
+      } else if (g !== ' ' && headCol - c <= INK && !k.includes('glow')) k += ` ink${headCol - c <= 1 ? 1 : 2}`
       chars.push(g); cls.push(mark(ids, k))
     }
     rows.push(toRuns(chars, cls))
@@ -337,6 +372,20 @@ export default function SignalChart({ items, selectedId, onSelect, onTime }: {
     : null
   const textStyle = { fontSize: FS, lineHeight: `${LH}px` }
 
+  // overview bar: one cell per slice of the whole strip
+  const barN = ch ? Math.max(0, Math.floor(VW / ch) - 2) : 0
+  const bar = Array.from({ length: barN }, (_, i) => {
+    const a = (i / barN) * contentW, b = ((i + 1) / barN) * contentW
+    return b > scroll.left && a < scroll.left + VW ? '▓' : '░'
+  }).join('')
+  const onBar = (e: React.PointerEvent) => {
+    const el = scrollRef.current
+    if (!el) return
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    el.scrollLeft = ((e.clientX - r.left) / r.width) * contentW - VW / 2
+  }
+  const nudge = (dir: number) => scrollRef.current?.scrollBy({ left: dir * VW * 0.8, behavior: 'smooth' })
+
   return (
     <div className="panel chart">
       <div className="sig__head">
@@ -351,7 +400,7 @@ export default function SignalChart({ items, selectedId, onSelect, onTime }: {
         </pre>
         <span ref={measureRef} className="asc asc__measure" style={{ fontSize: FS }} aria-hidden>{'0'.repeat(50)}</span>
 
-        <div className="sig__scroll" ref={scrollRef} tabIndex={0} onScroll={onScroll}
+        <div className="sig__scroll" id="sig-strip" ref={scrollRef} tabIndex={0} onScroll={onScroll}
           role="group" aria-label="Timeline 1966 to today. Scroll sideways to move through time."
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
           onPointerLeave={() => { if (!pan.current) setHoverId(null) }}>
@@ -363,9 +412,19 @@ export default function SignalChart({ items, selectedId, onSelect, onTime }: {
             </pre>
           )}
         </div>
-        {scroll.left > 4 && <span className="sig__hint sig__hint--l" aria-hidden>◀</span>}
-        {scroll.left < scroll.max - 4 && <span className="sig__hint sig__hint--r" aria-hidden>▶</span>}
       </div>
+
+      {/* overview: the whole timeline in one line; ▓ is the slice on screen. Click or drag to jump. */}
+      {barN > 0 && (
+        <div className="sig__overview" style={textStyle}>
+          <button className="asc" style={{ width: GUTTER }} disabled={scroll.left <= 1} aria-label="Scroll back in time" onClick={() => nudge(-1)}>◀</button>
+          <pre className="asc sig__bar" onPointerDown={onBar} onPointerMove={(e) => { if (e.buttons) onBar(e) }}
+            role="scrollbar" aria-controls="sig-strip" aria-orientation="horizontal" aria-valuenow={Math.round(frac * 100)} aria-label="Timeline overview">
+            {bar}
+          </pre>
+          <button className="asc" disabled={scroll.left >= scroll.max - 1} aria-label="Scroll forward in time" onClick={() => nudge(1)}>▶</button>
+        </div>
+      )}
     </div>
   )
 }

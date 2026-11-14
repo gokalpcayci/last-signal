@@ -6,11 +6,12 @@ import SunNow from './ui/SunNow'
 import { hardware, kindLabel, type HardwareKind } from './data/hardware'
 import {
   IconArrowRight, IconFilter, IconChevronLeft, IconChevronRight, IconCompass,
-  IconPulse, IconShuffle, IconSignalOff, IconSignalOk,
+  IconPulse, IconShuffle,
 } from './ui/icons'
 import NavEdge from './ui/NavEdge'
 import { LedLogo } from './ui/LedLogo'
 import SignalChart, { ARRIVAL_ORDER, arrivedCount } from './ui/SignalChart'
+import StrandedGame from './ui/StrandedGame'
 import { EXAGGERATION } from './scene/terrain'
 
 type Filter = 'all' | HardwareKind
@@ -36,13 +37,6 @@ function Gauge({ value }: { value: number }) {
       <line x1={20 + Math.cos(a) * 10} y1={20 + Math.sin(a) * 10} x2={20 + Math.cos(a) * 16} y2={20 + Math.sin(a) * 16} className="gauge__needle" />
     </svg>
   )
-}
-
-/** Row of thin ticks; the first `share` of them lit. */
-function Ticks({ share, tone }: { share: number; tone: 'ok' | 'warn' }) {
-  const N = 40
-  const lit = Math.round(share * N)
-  return <div className={`ticks ${tone}`}>{Array.from({ length: N }, (_, i) => <i key={i} className={i < lit ? 'on' : ''} />)}</div>
 }
 
 const fmtDate = (s: string) =>
@@ -83,7 +77,6 @@ export default function App() {
   }, [filter, landed])
   const selected = hardware.find((h) => h.id === selectedId) ?? null
   const active = hardware.filter((h) => h.status === 'active').length
-  const silent = hardware.length - active
 
   return (
     <div className="page">
@@ -190,7 +183,7 @@ export default function App() {
 
         {/* bottom row */}
         <section className="bottom">
-          <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
+          <StrandedGame onSelect={setSelectedId} />
 
           <div className="panel radar">
             <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />
@@ -201,18 +194,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="panel counter">
-            <div className="counter__icon ok"><IconSignalOk /></div>
-            <div className="counter__num">{active}<small> /{hardware.length}</small></div>
-            <div className="counter__label">Still working</div>
-            <Ticks share={active / hardware.length} tone="ok" />
-          </div>
-          <div className="panel counter">
-            <div className="counter__icon warn"><IconSignalOff /></div>
-            <div className="counter__num">{silent}<small> /{hardware.length}</small></div>
-            <div className="counter__label">Gone silent</div>
-            <Ticks share={silent / hardware.length} tone="warn" />
-          </div>
+          <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
         </section>
       </div>
     </div>
