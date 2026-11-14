@@ -41,3 +41,7 @@ export const IconSignalOk = (p: SVGProps<SVGSVGElement>) => (
 export const IconSignalOff = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M8 9v5.5M5.5 14.5h5M5 6.5a4 4 0 0 1 6 0M3 4.5a7 7 0 0 1 10 0M2 2l12 12" /></svg>
 )
+/** filter sliders — nav toggle on phones */
+export const IconFilter = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M2 4.5h7M12.5 4.5H14M2 11.5h1.5M7 11.5h7" /><circle cx="10.75" cy="4.5" r="1.75" /><circle cx="5.25" cy="11.5" r="1.75" /></svg>
+)

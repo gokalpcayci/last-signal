@@ -48,7 +48,10 @@ const xToLon = (x: number) => x / X_PER_DEG
 const zToLat = (z: number) => -z / Z_PER_DEG
 
 /** Vertical exaggeration: real relief (~11 km) would be nearly flat at this map scale. */
-const UNITS_PER_KM = 1.1
+export const UNITS_PER_KM = 1.1
+/** True scale: the map's horizontal scale (X_PER_DEG world units per degree; 1° ≈ 30.32 km on the Moon). */
+export const TRUE_UNITS_PER_KM = X_PER_DEG / ((Math.PI * 1737.4) / 180)
+export const EXAGGERATION = Math.round(UNITS_PER_KM / TRUE_UNITS_PER_KM)
 
 interface DemMeta {
   width: number; height: number; ppd: number
@@ -56,10 +59,12 @@ interface DemMeta {
 }
 
 export interface Dem {
-  /** Terrain height (world units) at world x/z */
-  heightAt: (x: number, z: number) => number
+  /** Terrain height (world units) at world x/z, at the current vertical scale (or `u` units per km) */
+  heightAt: (x: number, z: number, u?: number) => number
   /** Same as heightAt but without planet curvature (real elevation, for colors/contours) */
-  flatHeightAt: (x: number, z: number) => number
+  flatHeightAt: (x: number, z: number, u?: number) => number
+  /** Current vertical scale in world units per km (animated by the true-scale toggle) */
+  unitsPerKm: number
   /** Raw LOLA elevation in meters at lon/lat (degrees) */
   metersAt: (lon: number, lat: number) => number
   /** LRO surface brightness 0–1 at lon/lat (dark maria ≈ low, bright highlands ≈ high) */
@@ -97,11 +102,11 @@ function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray): De
       for (let j = -2; j <= 2; j++) s += metersAt(lon + (i / 4) * cellLon, lat + (j / 4) * cellLat)
     return s / 25
   }
-  const demHeight = (x: number, z: number) => (smoothMetersAt(xToLon(x), zToLat(z)) / 1000) * UNITS_PER_KM
-  const flatHeightAt = (x: number, z: number) => {
+  const kmAt = (x: number, z: number) => smoothMetersAt(xToLon(x), zToLat(z)) / 1000
+  const flatHeightAt = (x: number, z: number, u = dem.unitsPerKm) => {
     const m = mesaMask(x, z)
     if (m <= 0) return APRON_Y
-    return APRON_Y + (demHeight(x, z) - APRON_Y) * m
+    return APRON_Y + (kmAt(x, z) * u - APRON_Y) * m
   }
   /** Nearest-pixel albedo (RGBA from canvas; gray, so read R). Same grid as the DEM. */
   const albedoAt = (lon: number, lat: number) => {
@@ -110,8 +115,11 @@ function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray): De
     return albedo[(r * W + c) * 4] / 255
   }
   const onMap = (x: number, z: number) => mesaMask(x, z) > 0.98
-  const heightAt = (x: number, z: number) => flatHeightAt(x, z) - curvature(x, z)
-  const dem: Dem = { heightAt, flatHeightAt, metersAt, albedoAt, onMap, buildGeometry: () => buildTerrainGeometry(dem) }
+  const heightAt = (x: number, z: number, u?: number) => flatHeightAt(x, z, u) - curvature(x, z)
+  const dem: Dem = {
+    heightAt, flatHeightAt, metersAt, albedoAt, onMap, unitsPerKm: UNITS_PER_KM,
+    buildGeometry: () => buildTerrainGeometry(dem, kmAt),
+  }
   return dem
 }
 
@@ -151,17 +159,20 @@ const C_TERRACOTTA = new THREE.Color('#9c5636')
 const C_CLIFF = new THREE.Color("#7a4a33")
 const C_APRON = new THREE.Color("#55636a")
 
-function buildTerrainGeometry(dem: Dem) {
+function buildTerrainGeometry(dem: Dem, kmAt: (x: number, z: number) => number) {
   const g = new THREE.PlaneGeometry(WORLD.width, WORLD.depth, WORLD.segX, WORLD.segZ)
   g.rotateX(-Math.PI / 2)
   const pos = g.attributes.position as THREE.BufferAttribute
   const colors = new Float32Array(pos.count * 3)
   const mesa = new Float32Array(pos.count)
   const alb = new Float32Array(pos.count)
+  const km = new Float32Array(pos.count)
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i)
     mesa[i] = mesaMask(x, z)
-    pos.setY(i, dem.flatHeightAt(x, z)) // flat first: colors/slopes use real elevation
+    km[i] = mesa[i] > 0 ? kmAt(x, z) : 0
+    // flat first, at the exaggerated scale: colors/slopes always use this relief
+    pos.setY(i, APRON_Y + (km[i] * UNITS_PER_KM - APRON_Y) * mesa[i])
     alb[i] = dem.albedoAt(xToLon(x), zToLat(z))
   }
   const top = Array.from({ length: pos.count }, (_, i) => i).filter((i) => mesa[i] > 0.98)
@@ -203,15 +214,35 @@ function buildTerrainGeometry(dem: Dem) {
   }
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   g.setAttribute("aMesa", new THREE.BufferAttribute(mesa, 1))
-  // keep real elevation for contour lines, then bend the surface into a planet curve
+  // keep real elevation (in km, scale-independent) for contour lines
   const elev = new Float32Array(pos.count)
+  const curve = new Float32Array(pos.count)
   for (let i = 0; i < pos.count; i++) {
-    elev[i] = pos.getY(i)
-    pos.setY(i, elev[i] - curvature(pos.getX(i), pos.getZ(i)))
+    elev[i] = pos.getY(i) / UNITS_PER_KM
+    curve[i] = curvature(pos.getX(i), pos.getZ(i))
   }
   g.setAttribute("aElev", new THREE.BufferAttribute(elev, 1))
+  g.userData = { km, mesa, curve } satisfies ScaleData
+  applyVerticalScale(g, dem.unitsPerKm)
   g.computeVertexNormals()
   return g
+}
+
+interface ScaleData { km: Float32Array; mesa: Float32Array; curve: Float32Array }
+
+/**
+ * Re-sets every vertex height for a vertical scale `u` (world units per km) and bends
+ * it into the planet curve. Cheap enough (~115k verts) to run every frame of the
+ * true-scale morph; CPU positions stay exact, so raycasts (elevation probe) keep working.
+ */
+export function applyVerticalScale(g: THREE.BufferGeometry, u: number) {
+  const { km, mesa, curve } = g.userData as ScaleData
+  const pos = g.attributes.position as THREE.BufferAttribute
+  const arr = pos.array as Float32Array
+  for (let i = 0; i < pos.count; i++) arr[i * 3 + 1] = APRON_Y + (km[i] * u - APRON_Y) * mesa[i] - curve[i]
+  pos.needsUpdate = true
+  g.computeBoundingSphere()
+  g.computeBoundingBox()
 }
 
 /** Max distance from the center to a world corner — the boot reveal ends past this. */
@@ -222,7 +253,7 @@ export const REVEAL_MAX = Math.hypot(WORLD.width / 2, WORLD.depth / 2) + 10
  * always renders 1px wide). One draw call handles:
  *  - square cells with constant on-screen line width (fwidth), faint halo, fog
  *  - 1 km contour lines on the plateau (5 km lines brighter)
- *  - live day/night shading from the Sun's position (uSunLon), with a glowing terminator
+ *  - live day/night shading from the Sun's position (uSunLon)
  *  - the boot-up reveal: a ring that grows from the center (uReveal)
  */
 export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: number) {
@@ -234,7 +265,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uFog: { value: new THREE.Color(fogColor) },
       uFogNear: { value: fogNear },
       uFogFar: { value: fogFar },
-      uContourStep: { value: UNITS_PER_KM }, // 1 km of real elevation
+      uContourStep: { value: 1 },            // aElev is in km: a line every 1 km
       uSunLon: { value: 0 },                 // sub-solar longitude, radians
       uReveal: { value: REVEAL_MAX },        // world-unit radius revealed so far
       uDegX: { value: 1 / X_PER_DEG },       // world x → degrees lon
@@ -316,8 +347,6 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         float sunDot = cos(vLonLat.y) * cos(vLonLat.x - uSunLon);
         float day = smoothstep(-0.02, 0.09, sunDot);
         col *= mix(0.42, 1.0, day);
-        float terminator = exp(-abs(sunDot) * 45.0) * onTop;
-        col += vec3(0.95, 0.72, 0.38) * terminator * 0.22;
 
         // bright leading edge while booting
         col += vec3(0.55, 0.85, 0.6) * ring * step(uReveal, ${REVEAL_MAX.toFixed(1)} - 1.0) * 0.6;

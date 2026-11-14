@@ -2,15 +2,22 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { latToZ, loadDem, lonToX, makeGridMaterial, REVEAL_MAX, worldToLonLat, type Dem } from "./terrain"
+import {
+  applyVerticalScale, latToZ, loadDem, lonToX, makeGridMaterial, REVEAL_MAX, TRUE_UNITS_PER_KM, UNITS_PER_KM,
+  worldToLonLat, type Dem,
+} from "./terrain"
 import { subsolarLon } from './sun'
 import type { Hardware } from '../data/hardware'
+import { features } from '../data/features'
 import { STACKED_QUERY } from '../layout'
+import { FeatureProjector, LaserBeams, Traverses } from './overlays'
 
 interface Props {
   items: Hardware[]
   selectedId: string | null
   onSelect: (id: string | null) => void
+  /** Show relief at true vertical scale instead of exaggerated */
+  trueScale: boolean
 }
 
 type Vec3 = [number, number, number]
@@ -24,10 +31,11 @@ const FOG_FAR = 175
 const BOOT_GRID_S = 2.2
 const BOOT_MARKERS_START_S = 1.5
 const BOOT_MARKER_STEP_S = 0.09
+const SCALE_MORPH_S = 1.4
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Hardware at the same site sits within metres of each other — fan them out so markers don't overlap. */
-function layout(items: Hardware[], dem: Dem | null) {
+function layout(items: Hardware[], dem: Dem | null, unitsPerKm: number) {
   const out = new Map<string, Vec3>()
   if (!dem) return out
   const bySite = new Map<string, Hardware[]>()
@@ -38,7 +46,7 @@ function layout(items: Hardware[], dem: Dem | null) {
       const a = (i / group.length) * Math.PI * 2
       const r = group.length > 1 ? 3.4 : 0
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r
-      out.set(h.id, [x, dem.heightAt(x, z), z])
+      out.set(h.id, [x, dem.heightAt(x, z, unitsPerKm), z])
     })
   }
   return out
@@ -53,7 +61,7 @@ export interface ProbeHit {
   point: Vec3
 }
 
-function Terrain({ dem, onProbe }: { dem: Dem; onProbe: (hit: ProbeHit | null) => void }) {
+function Terrain({ dem, trueScale, onProbe }: { dem: Dem; trueScale: boolean; onProbe: (hit: ProbeHit | null) => void }) {
   const geo = useMemo(() => dem.buildGeometry(), [dem])
   const mat = useMemo(() => makeGridMaterial(BG, FOG_NEAR, FOG_FAR), [])
   // Uniforms are updated through this ref (per frame / per minute), never via the memoized value.
@@ -76,7 +84,22 @@ function Terrain({ dem, onProbe }: { dem: Dem; onProbe: (hit: ProbeHit | null) =
   // Boot reveal: grow uReveal from 0 to REVEAL_MAX with an ease-out.
   const start = useRef<number | null>(null)
   const skip = useMemo(() => reducedMotion(), [])
+  // True-scale morph: ease dem.unitsPerKm to the target and re-set the mesh heights each frame.
+  const morph = useRef<{ from: number; to: number; t0: number | null } | null>(null)
+  useEffect(() => {
+    const to = trueScale ? TRUE_UNITS_PER_KM : UNITS_PER_KM
+    if (to !== dem.unitsPerKm) morph.current = { from: dem.unitsPerKm, to, t0: null }
+  }, [trueScale, dem])
   useFrame(({ clock }) => {
+    const mo = morph.current
+    if (mo) {
+      mo.t0 ??= clock.elapsedTime
+      const t = skip ? 1 : Math.min(1, (clock.elapsedTime - mo.t0) / SCALE_MORPH_S)
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 // ease-in-out cubic
+      dem.unitsPerKm = mo.from + (mo.to - mo.from) * e
+      applyVerticalScale(geo, dem.unitsPerKm)
+      if (t >= 1) morph.current = null
+    }
     const m = matRef.current
     if (!m) return
     if (skip) { m.uniforms.uReveal.value = REVEAL_MAX; return }
@@ -113,11 +136,19 @@ function ProbeCross({ crossRef }: { crossRef: React.Ref<THREE.Mesh> }) {
   )
 }
 
-function Poles({ positions }: { positions: Vec3[] }) {
+/** Marker stems. Heights follow the live terrain (true-scale morph), so they're set per frame. */
+function Poles({ dem, positions }: { dem: Dem; positions: Map<string, Vec3> }) {
+  const refs = useRef(new Map<string, THREE.Mesh>())
+  useFrame(() => {
+    for (const [id, p] of positions) {
+      const m = refs.current.get(id)
+      if (m) m.position.set(p[0], dem.heightAt(p[0], p[2]) + MARKER_LIFT / 2, p[2])
+    }
+  })
   return (
     <>
-      {positions.map((p, i) => (
-        <mesh key={i} position={[p[0], p[1] + MARKER_LIFT / 2, p[2]]}>
+      {[...positions].map(([id]) => (
+        <mesh key={id} ref={(m) => { if (m) refs.current.set(id, m); else refs.current.delete(id) }}>
           <cylinderGeometry args={[0.03, 0.03, MARKER_LIFT]} />
           <meshBasicMaterial color="#d8d8d0" />
         </mesh>
@@ -130,14 +161,21 @@ function Poles({ positions }: { positions: Vec3[] }) {
  * Projects each marker's 3D anchor to screen space every frame and moves the
  * matching DOM button. Plain DOM (not drei <Html>) avoids nested React roots.
  */
-function Projector({ positions, els }: { positions: Map<string, Vec3>; els: React.RefObject<Map<string, HTMLElement>> }) {
+function Projector({ dem, positions, els }: {
+  dem: Dem
+  positions: Map<string, Vec3>
+  els: React.RefObject<Map<string, HTMLElement>>
+}) {
   const { camera, size } = useThree()
   const v = useMemo(() => new THREE.Vector3(), [])
   useFrame(() => {
+    // CameraControls moves the camera (priority −1) but doesn't refresh its matrices — three.js
+    // only does that inside render(). Without this, markers use last frame's view and lag behind.
+    camera.updateMatrixWorld()
     for (const [id, p] of positions) {
       const el = els.current.get(id)
       if (!el) continue
-      v.set(p[0], p[1] + MARKER_LIFT, p[2]).project(camera)
+      v.set(p[0], dem.heightAt(p[0], p[2]) + MARKER_LIFT, p[2]).project(camera)
       const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1
       el.style.display = visible ? '' : 'none'
       if (visible) {
@@ -214,15 +252,25 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
   )
 }
 
-export default function MoonScene({ items, selectedId, onSelect }: Props) {
+export default function MoonScene({ items, selectedId, onSelect, trueScale }: Props) {
   const [dem, setDem] = useState<Dem | null>(null)
   useEffect(() => {
     let alive = true
     loadDem().then((d) => { if (alive) setDem(d) }, (e) => console.error("Failed to load lunar elevation data", e))
     return () => { alive = false }
   }, [])
-  const positions = useMemo(() => layout(items, dem), [items, dem])
+  const positions = useMemo(
+    () => layout(items, dem, trueScale ? TRUE_UNITS_PER_KM : UNITS_PER_KM),
+    [items, dem, trueScale],
+  )
   const els = useRef(new Map<string, HTMLElement>())
+  const featureEls = useRef(new Map<string, HTMLElement>())
+
+  const reflectors = useMemo(() => items
+    .filter((h) => h.kind === 'reflector' && positions.has(h.id))
+    .map((h) => { const p = positions.get(h.id)!; return { id: h.id, x: p[0], z: p[2] } }), [items, positions])
+  const rovers = useMemo(() => new Set(items.filter((h) => h.kind === 'rover').map((h) => h.id)), [items])
+  const selectedMission = items.find((h) => h.id === selectedId)?.mission ?? null
   const probeLabel = useRef<HTMLDivElement>(null)
   const probeCross = useRef<THREE.Mesh>(null)
   // Probe updates go straight to the DOM / mesh (no React re-render on every mouse move).
@@ -259,14 +307,28 @@ export default function MoonScene({ items, selectedId, onSelect }: Props) {
       >
         <color attach="background" args={[BG]} />
         <fog attach="fog" args={[BG, FOG_NEAR, FOG_FAR]} />
-        {dem && <Terrain dem={dem} onProbe={onProbe} />}
+        {dem && <Terrain dem={dem} trueScale={trueScale} onProbe={onProbe} />}
         <ProbeCross crossRef={probeCross} />
-        {polesOn && <Poles positions={[...positions.values()]} />}
-        <Projector positions={positions} els={els} />
+        {dem && polesOn && <Poles dem={dem} positions={positions} />}
+        {dem && polesOn && <LaserBeams dem={dem} anchors={reflectors} />}
+        {dem && polesOn && <Traverses dem={dem} visibleRovers={rovers} highlightMission={selectedMission} />}
+        {dem && <Projector dem={dem} positions={positions} els={els} />}
+        {dem && <FeatureProjector dem={dem} features={features} els={featureEls} />}
         <CameraRig selectedId={selectedId} positions={positions} />
       </Canvas>
 
       <div className="probe" ref={probeLabel} style={{ display: 'none' }} aria-hidden />
+
+      <div className={`features${dem ? ' is-on' : ''}`} aria-hidden>
+        {features.map((f) => (
+          <span
+            key={f.name}
+            ref={(el) => { if (el) featureEls.current.set(f.name, el); else featureEls.current.delete(f.name) }}
+            className={`feature feature--${f.kind}`}
+            style={{ display: 'none' }}
+          >{f.name}</span>
+        ))}
+      </div>
 
       <div className={`markers${dem ? ' is-booting' : ''}`}>
         {items.map((h) => (

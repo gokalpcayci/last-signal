@@ -5,10 +5,13 @@ import { STACKED_QUERY } from './layout'
 import SunNow from './ui/SunNow'
 import { hardware, kindLabel, type HardwareKind } from './data/hardware'
 import {
-  IconArrowRight, IconChevronDown, IconChevronLeft, IconChevronRight, IconCompass,
+  IconArrowRight, IconFilter, IconChevronLeft, IconChevronRight, IconCompass,
   IconPulse, IconShuffle, IconSignalOff, IconSignalOk,
 } from './ui/icons'
+import NavEdge from './ui/NavEdge'
 import { LedLogo } from './ui/LedLogo'
+import SignalChart, { inRange, type TimeRange } from './ui/SignalChart'
+import { EXAGGERATION } from './scene/terrain'
 
 type Filter = 'all' | HardwareKind
 const FILTERS: { id: Filter; label: string }[] = [
@@ -21,10 +24,6 @@ const FILTERS: { id: Filter; label: string }[] = [
 ]
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
 const ROWS = ['1', '2', '3', '4', '5']
-const YEARS = [1966, 1967, 1968, 1969, 1970, 1971, 1972]
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const MONTH_LABEL = (i: number) => `${MONTHS[i % 12]} ${YEARS[0] + Math.floor(i / 12)}`
 
 /** Thin circle gauge with a needle at the value — the reference's top-right dial. */
 function Gauge({ value }: { value: number }) {
@@ -55,6 +54,16 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [navOpen, setNavOpen] = useState(false)
+  // smaller logo in the stacked layout so the nav takes less vertical space
+  const [stacked, setStacked] = useState(() => window.matchMedia(STACKED_QUERY).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(STACKED_QUERY)
+    const on = () => setStacked(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  const [timeRange, setTimeRange] = useState<TimeRange | null>(null)
+  const [trueScale, setTrueScale] = useState(false)
   const currentFilter = FILTERS.find((f) => f.id === filter)?.label ?? 'All hardware'
   const rightRef = useRef<HTMLElement>(null)
 
@@ -65,17 +74,13 @@ export default function App() {
     return () => clearTimeout(t)
   }, [selectedId])
 
-  const items = useMemo(() => hardware.filter((h) => filter === 'all' || h.kind === filter), [filter])
+  const items = useMemo(
+    () => hardware.filter((h) => (filter === 'all' || h.kind === filter) && (!timeRange || inRange(h, timeRange))),
+    [filter, timeRange],
+  )
   const selected = hardware.find((h) => h.id === selectedId) ?? null
   const active = hardware.filter((h) => h.status === 'active').length
   const silent = hardware.length - active
-  // 84 monthly buckets (Jan 1966 – Dec 1972) → thin histogram bars like the reference
-  const perMonth = Array.from({ length: YEARS.length * 12 }, () => 0)
-  for (const h of hardware) {
-    const [y, m] = h.arrived.split('-').map(Number)
-    perMonth[(y - YEARS[0]) * 12 + (m - 1)]++
-  }
-  const maxMonth = Math.max(...perMonth)
 
   return (
     <div className="page">
@@ -94,17 +99,16 @@ export default function App() {
         </div>
 
         <div className="scene">
-          <MoonScene items={items} selectedId={selectedId} onSelect={setSelectedId} />
+          <MoonScene items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} />
         </div>
 
         {/* top-left: logo + nav */}
         <aside className={`nav${navOpen ? ' is-open' : ''}`}>
           <div className="nav__bar">
-            <LedLogo className="logo" width={84} />
+            <LedLogo className="logo" width={stacked ? 56 : 84} />
             {/* phones: one compact row; tap to expand the filter row */}
-            <button className="nav__toggle" aria-expanded={navOpen} aria-controls="nav-filters" onClick={() => setNavOpen((o) => !o)}>
-              <span>[{currentFilter.toUpperCase()}]</span>
-              <IconChevronDown className="nav__chev" />
+            <button className="nav__toggle" aria-expanded={navOpen} aria-controls="nav-filters" aria-label={`Filter hardware (now: ${currentFilter})`} title={currentFilter} onClick={() => setNavOpen((o) => !o)}>
+              <IconFilter />
             </button>
           </div>
           <div className="nav__drawer" id="nav-filters">
@@ -121,6 +125,7 @@ export default function App() {
               <div className="nav__soon">MARS · DEEP SPACE — SOON</div>
             </div>
           </div>
+          <NavEdge />
         </aside>
 
         {/* right column: stat + globe, or story */}
@@ -172,21 +177,17 @@ export default function App() {
           }}><IconChevronRight /></button>
           <button title="Random" aria-label="Random" onClick={() => setSelectedId(items[Math.floor(Math.random() * items.length)]?.id ?? null)}><IconShuffle /></button>
           <button title="Start tour at Apollo 11" aria-label="Start tour" className={selectedId ? 'is-on' : ''} onClick={() => setSelectedId('a11-lm')}><IconCompass /></button>
+          <button
+            className={`toolbar__scale${trueScale ? ' is-on' : ''}`}
+            aria-pressed={trueScale}
+            title={trueScale ? 'True scale: the Moon is really this flat' : `Mountains are stretched ×${EXAGGERATION} so you can see them. Click for true scale`}
+            onClick={() => setTrueScale((v) => !v)}
+          >{trueScale ? '1:1' : `×${EXAGGERATION}`}</button>
         </div>
 
         {/* bottom row */}
         <section className="bottom">
-          <div className="panel chart">
-            <div className="chips"><span>Moon <IconChevronDown /></span><span>1966–1972 <IconChevronDown /></span></div>
-            <div className="panel__title">Hardware arrivals by month</div>
-            <div className="bars">
-              {perMonth.map((n, i) => (
-                <div key={i} className={`bar${n ? '' : ' bar--empty'}`} style={{ height: n ? `${(n / maxMonth) * 100}%` : undefined }}
-                  title={n ? `${MONTH_LABEL(i)}: ${n}` : undefined} />
-              ))}
-            </div>
-            <div className="axis">{YEARS.filter((_, i) => i % 2 === 0).map((y) => <span key={y}>{y}</span>)}<span>1973</span></div>
-          </div>
+          <SignalChart items={items} selectedId={selectedId} onSelect={setSelectedId} range={timeRange} onRange={setTimeRange} />
 
           <div className="panel radar">
             <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />
