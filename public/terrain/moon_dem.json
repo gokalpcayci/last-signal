@@ -1,13 +1,13 @@
 {
   "source": "NASA SVS CGI Moon Kit (LRO LOLA), ldem_16_uint.tif \u2014 https://svs.gsfc.nasa.gov/4720",
-  "width": 896,
-  "height": 800,
-  "ppd": 8,
-  "lonMin": -56.0,
-  "lonMax": 56.0,
-  "latMin": -50.0,
-  "latMax": 50.0,
+  "width": 752,
+  "height": 592,
+  "ppd": 4,
+  "lonMin": -94.0,
+  "lonMax": 94.0,
+  "latMin": -74.0,
+  "latMax": 74.0,
   "encoding": "uint16 LE, half-meters, offset 20000, row 0 = latMax",
-  "minMeters": -6270.0,
-  "maxMeters": 4542.5
+  "minMeters": -5821.0,
+  "maxMeters": 6105.0
 }

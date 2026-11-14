@@ -11,27 +11,44 @@ import * as THREE from 'three'
  * plateau (MESA) with cliff edges; around it is a flat, coarser "apron" grid.
  * The apron is a stylized frame only — every hardware site is on the plateau.
  */
-export const WORLD = { width: 200, depth: 170, segX: 216, segZ: 184 }
-/** Plateau half-size in world units (covers the DEM crop: lon ±52°, lat ±47°) */
-const MESA = { hx: 55, hz: 45, radius: 10 }
+export const WORLD = { width: 340, depth: 290, segX: 366, segZ: 312 }
+/** Plateau half-size in world units: the whole near side, lon ±90°, lat ±70° (DEM crop has a margin) */
+const MESA = { hx: 74, hz: 55, radius: 12 }
 const APRON_Y = -9
 
-/** 1 on the plateau, 0 on the apron; a ~3-unit cliff with an irregular, natural-looking edge. */
-export function mesaMask(x: number, z: number) {
+/**
+ * Planet curvature: the surface bends down with distance from the center like a
+ * slice of a sphere (radius CURVE_R world units). It gives a curved horizon and
+ * drops the world edges below it, so the end of the grid is never visible.
+ * Purely visual — contours, colors and the probe use the uncurved elevation.
+ */
+const CURVE_R = 300
+export const curvature = (x: number, z: number) => (x * x + z * z) / (2 * CURVE_R)
+
+/** Signed distance to the plateau edge (negative inside), with an irregular, natural-looking wobble. */
+function mesaSdf(x: number, z: number) {
   const qx = Math.abs(x) - (MESA.hx - MESA.radius)
   const qz = Math.abs(z) - (MESA.hz - MESA.radius)
   const sdf = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - MESA.radius
   const jitter = 2.2 * Math.sin(x * 0.21) + 1.6 * Math.sin(z * 0.17 + 1.3) + 1.1 * Math.sin((x + z) * 0.33)
-  return 1 - THREE.MathUtils.smoothstep(sdf + jitter, -1.5, 1.5)
+  return sdf + jitter
 }
 
-export const lonToX = (lon: number) => lon * 1.15
-export const latToZ = (lat: number) => -lat * 1.05
-const xToLon = (x: number) => x / 1.15
-const zToLat = (z: number) => -z / 1.05
+/** 1 on the plateau, 0 on the apron; a ~3-unit cliff. */
+export function mesaMask(x: number, z: number) {
+  return 1 - THREE.MathUtils.smoothstep(mesaSdf(x, z), -1.5, 1.5)
+}
+
+// World units per degree. Slightly less in z so the near side (180° × 140°) keeps a pleasing aspect.
+const X_PER_DEG = 0.8
+const Z_PER_DEG = 0.76
+export const lonToX = (lon: number) => lon * X_PER_DEG
+export const latToZ = (lat: number) => -lat * Z_PER_DEG
+const xToLon = (x: number) => x / X_PER_DEG
+const zToLat = (z: number) => -z / Z_PER_DEG
 
 /** Vertical exaggeration: real relief (~11 km) would be nearly flat at this map scale. */
-const UNITS_PER_KM = 1.2
+const UNITS_PER_KM = 1.1
 
 interface DemMeta {
   width: number; height: number; ppd: number
@@ -41,6 +58,8 @@ interface DemMeta {
 export interface Dem {
   /** Terrain height (world units) at world x/z */
   heightAt: (x: number, z: number) => number
+  /** Same as heightAt but without planet curvature (real elevation, for colors/contours) */
+  flatHeightAt: (x: number, z: number) => number
   /** Raw LOLA elevation in meters at lon/lat (degrees) */
   metersAt: (lon: number, lat: number) => number
   /** LRO surface brightness 0–1 at lon/lat (dark maria ≈ low, bright highlands ≈ high) */
@@ -79,7 +98,7 @@ function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray): De
     return s / 25
   }
   const demHeight = (x: number, z: number) => (smoothMetersAt(xToLon(x), zToLat(z)) / 1000) * UNITS_PER_KM
-  const heightAt = (x: number, z: number) => {
+  const flatHeightAt = (x: number, z: number) => {
     const m = mesaMask(x, z)
     if (m <= 0) return APRON_Y
     return APRON_Y + (demHeight(x, z) - APRON_Y) * m
@@ -91,7 +110,8 @@ function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray): De
     return albedo[(r * W + c) * 4] / 255
   }
   const onMap = (x: number, z: number) => mesaMask(x, z) > 0.98
-  const dem: Dem = { heightAt, metersAt, albedoAt, onMap, buildGeometry: () => buildTerrainGeometry(dem) }
+  const heightAt = (x: number, z: number) => flatHeightAt(x, z) - curvature(x, z)
+  const dem: Dem = { heightAt, flatHeightAt, metersAt, albedoAt, onMap, buildGeometry: () => buildTerrainGeometry(dem) }
   return dem
 }
 
@@ -141,7 +161,7 @@ function buildTerrainGeometry(dem: Dem) {
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i)
     mesa[i] = mesaMask(x, z)
-    pos.setY(i, dem.heightAt(x, z))
+    pos.setY(i, dem.flatHeightAt(x, z)) // flat first: colors/slopes use real elevation
     alb[i] = dem.albedoAt(xToLon(x), zToLat(z))
   }
   const top = Array.from({ length: pos.count }, (_, i) => i).filter((i) => mesa[i] > 0.98)
@@ -175,15 +195,21 @@ function buildTerrainGeometry(dem: Dem) {
     } else {
       c.copy(C_APRON)
     }
-    // fade outer edges into darkness
-    const ex = Math.abs(pos.getX(i)) / (WORLD.width / 2)
-    const ez = Math.abs(pos.getZ(i)) / (WORLD.depth / 2)
-    const fade = 1 - THREE.MathUtils.smoothstep(Math.max(ex, ez), 0.55, 0.92)
-    c.multiplyScalar(0.15 + 0.85 * fade)
+    // The terrain never "ends": over the plateau's last ~18 units its colors dissolve
+    // into darkness, and the cliff and apron beyond stay nearly black.
+    const edge = THREE.MathUtils.smoothstep(mesaSdf(pos.getX(i), pos.getZ(i)), -18, -2)
+    c.multiplyScalar(1 - 0.94 * edge)
     colors.set([c.r, c.g, c.b], i * 3)
   }
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-  g.setAttribute('aMesa', new THREE.BufferAttribute(mesa, 1))
+  g.setAttribute("aMesa", new THREE.BufferAttribute(mesa, 1))
+  // keep real elevation for contour lines, then bend the surface into a planet curve
+  const elev = new Float32Array(pos.count)
+  for (let i = 0; i < pos.count; i++) {
+    elev[i] = pos.getY(i)
+    pos.setY(i, elev[i] - curvature(pos.getX(i), pos.getZ(i)))
+  }
+  g.setAttribute("aElev", new THREE.BufferAttribute(elev, 1))
   g.computeVertexNormals()
   return g
 }
@@ -211,12 +237,13 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uContourStep: { value: UNITS_PER_KM }, // 1 km of real elevation
       uSunLon: { value: 0 },                 // sub-solar longitude, radians
       uReveal: { value: REVEAL_MAX },        // world-unit radius revealed so far
-      uDegX: { value: 1 / 1.15 },            // world x → degrees lon
-      uDegZ: { value: -1 / 1.05 },           // world z → degrees lat
+      uDegX: { value: 1 / X_PER_DEG },       // world x → degrees lon
+      uDegZ: { value: -1 / Z_PER_DEG },      // world z → degrees lat
     },
     vertexShader: /* glsl */ `
       attribute vec3 color;
       attribute float aMesa;
+      attribute float aElev;
       uniform float uDegX;
       uniform float uDegZ;
       varying vec2 vUv;
@@ -230,7 +257,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         vUv = uv;
         vColor = color;
         vMesa = aMesa;
-        vHeight = position.y;
+        vHeight = aElev; // real (uncurved) elevation
         vXZ = position.xz;
         vLonLat = radians(vec2(position.x * uDegX, position.z * uDegZ));
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -279,7 +306,8 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         vec3 col = uFill + vColor * 0.1 + vColor * (core * 1.7 + glow) * density;
 
         // ── contour lines on the plateau: every 1 km, brighter every 5 km ──
-        float onTop = smoothstep(0.9, 1.0, vMesa);
+        // fade overlays with the vertex color so they dissolve at the map's dark edges too
+        float onTop = smoothstep(0.9, 1.0, vMesa) * clamp(length(vColor) * 3.0, 0.0, 1.0);
         float minor = lineAA(vHeight / uContourStep, 0.6) * 0.22;
         float major = lineAA(vHeight / (uContourStep * 5.0), 0.8) * 0.4;
         col += vec3(0.85, 0.82, 0.7) * max(minor, major) * onTop;

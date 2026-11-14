@@ -20,15 +20,16 @@ import numpy as np
 from PIL import Image
 
 SRC_PPD = 16          # source pixels per degree
-OUT_PPD = 8           # output pixels per degree
-LON_MIN, LON_MAX = -56.0, 56.0
-LAT_MIN, LAT_MAX = -50.0, 50.0
+OUT_PPD = 4           # output pixels per degree (must divide SRC_PPD)
+LON_MIN, LON_MAX = -94.0, 94.0   # whole near side (+ margin for the cliff edge)
+LAT_MIN, LAT_MAX = -74.0, 74.0
 
 def main(src: str) -> None:
     Image.MAX_IMAGE_PIXELS = None
     img = np.array(Image.open(src), dtype=np.uint16)
     h, w = img.shape
     assert (w, h) == (360 * SRC_PPD, 180 * SRC_PPD), f"unexpected size {w}x{h}"
+    assert SRC_PPD % OUT_PPD == 0, "OUT_PPD must divide SRC_PPD (block-average downsample)"
 
     x0 = int((LON_MIN + 180) * SRC_PPD); x1 = int((LON_MAX + 180) * SRC_PPD)
     y0 = int((90 - LAT_MAX) * SRC_PPD);  y1 = int((90 - LAT_MIN) * SRC_PPD)

@@ -6,7 +6,7 @@ import SunNow from './ui/SunNow'
 import { hardware, kindLabel, type HardwareKind } from './data/hardware'
 import {
   IconArrowRight, IconChevronDown, IconChevronLeft, IconChevronRight, IconCompass,
-  IconPulse, IconSearch, IconShuffle, IconSignalOff, IconSignalOk,
+  IconPulse, IconShuffle, IconSignalOff, IconSignalOk,
 } from './ui/icons'
 
 type Filter = 'all' | HardwareKind
@@ -53,6 +53,8 @@ const fmtDate = (s: string) =>
 export default function App() {
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [navOpen, setNavOpen] = useState(false)
+  const currentFilter = FILTERS.find((f) => f.id === filter)?.label ?? 'All hardware'
   const rightRef = useRef<HTMLElement>(null)
 
   // Stacked (phone) layout: the story sits below the 3D view. Let the camera fly first, then bring the story into view.
@@ -95,25 +97,30 @@ export default function App() {
         </div>
 
         {/* top-left: logo + nav */}
-        <aside className="nav">
-          <img className="logo" src="/brand/app-icon.svg" alt="Lostronomy" width={32} height={32} />
-          <div className="nav__world"><i /> MOON / SURFACE</div>
-          <ul>
-            {FILTERS.map((f) => (
-              <li key={f.id}>
-                <button className={filter === f.id ? 'is-on' : ''} onClick={() => { setFilter(f.id); setSelectedId(null) }}>
-                  {filter === f.id ? `[${f.label.toUpperCase()}]` : f.label.toUpperCase()}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="nav__soon">MARS · DEEP SPACE — SOON</div>
+        <aside className={`nav${navOpen ? ' is-open' : ''}`}>
+          <div className="nav__bar">
+            <img className="logo" src="/brand/app-icon.svg" alt="Lostronomy" width={32} height={32} />
+            {/* phones: one compact row; tap to expand the filter row */}
+            <button className="nav__toggle" aria-expanded={navOpen} aria-controls="nav-filters" onClick={() => setNavOpen((o) => !o)}>
+              <span>[{currentFilter.toUpperCase()}]</span>
+              <IconChevronDown className="nav__chev" />
+            </button>
+          </div>
+          <div className="nav__drawer" id="nav-filters">
+            <div className="nav__drawer-inner">
+              <ul>
+                {FILTERS.map((f, i) => (
+                  <li key={f.id} style={{ '--i': i } as React.CSSProperties}>
+                    <button className={filter === f.id ? 'is-on' : ''} onClick={() => { setFilter(f.id); setSelectedId(null); setNavOpen(false) }}>
+                      {filter === f.id ? `[${f.label.toUpperCase()}]` : f.label.toUpperCase()}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="nav__soon">MARS · DEEP SPACE — SOON</div>
+            </div>
+          </div>
         </aside>
-
-        <div className="search">
-          <label className="search__box"><IconSearch /><span>search</span></label>
-          <span className="search__thumb" aria-hidden />
-        </div>
 
         {/* right column: stat + globe, or story */}
         <section className="right" ref={rightRef}>

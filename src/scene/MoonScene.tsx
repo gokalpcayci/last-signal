@@ -16,8 +16,8 @@ interface Props {
 type Vec3 = [number, number, number]
 const MARKER_LIFT = 1.4
 const BG = "#0d0e0d"
-const FOG_NEAR = 120
-const FOG_FAR = 250
+const FOG_NEAR = 90
+const FOG_FAR = 175
 
 // Boot-up sequence (seconds): the grid grows out from the center, then markers
 // ping in one by one in landing order (1966 → 1972).
@@ -151,10 +151,10 @@ function Projector({ positions, els }: { positions: Map<string, Vec3>; els: Reac
   return null
 }
 
-// Low, distant view: flat apron in the foreground, cliff, then the plateau (reference framing).
-const HOME = { pos: [0, 33, 158] as const, target: [0, -3, 2] as const }
-// Sites span lon -43°…+31° → center the portrait view between them (x ≈ -3).
-const HOME_PORTRAIT = { pos: [-4, 108, 82] as const, target: [-4, 0, -2] as const }
+// Home views sit *inside* the map, framed on the hardware (sites span lon −43°…+31°, lat −41°…+26°),
+// so terrain always runs past every screen edge — the end of the map is never in view.
+const HOME = { pos: [-4, 50, 58] as const, target: [-4, -3, 0] as const }
+const HOME_PORTRAIT = { pos: [-4, 90, 16] as const, target: [-4, 0, 2] as const }
 
 function CameraRig({ selectedId, positions }: { selectedId: string | null; positions: Map<string, Vec3> }) {
   const controls = useRef<CameraControls>(null)
@@ -163,7 +163,7 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
   const { width, height } = useThree((s) => s.size)
   // Portrait screens are tall and narrow: a low horizon view wastes the height and
   // crowds markers. Use a wider lens and a more top-down home view instead.
-  const portrait = aspect < 1
+  const portrait = aspect < 1.25 // square-ish or tall (phone map section) → top-down
   // Re-evaluated on every resize render.
   const stacked = window.matchMedia(STACKED_QUERY).matches
   // In the overlay layout the right panel covers part of the canvas.
@@ -190,7 +190,28 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
     else if (portrait) c.setLookAt(...HOME_PORTRAIT.pos, ...HOME_PORTRAIT.target, true)
     else c.setLookAt(...HOME.pos, ...HOME.target, true)
   }, [selectedId, positions, portrait])
-  return <CameraControls ref={controls} minDistance={10} maxDistance={240} maxPolarAngle={Math.PI * 0.45} />
+  // Keep both the target AND the camera itself inside a box over the plateau (±74 × ±55),
+  // so you can never pan, orbit or zoom out far enough to see where the map ends.
+  useEffect(() => {
+    const c = controls.current
+    if (!c) return
+    c.boundaryEnclosesCamera = true
+    c.setBoundary(new THREE.Box3(new THREE.Vector3(-48, -20, -46), new THREE.Vector3(48, 95, 58)))
+    c.boundaryFriction = 0.15
+  }, [])
+  return (
+    <CameraControls
+      ref={controls}
+      minDistance={10}
+      maxDistance={95}
+      // desktop can't tilt fully top-down; phones keep their top-down home view
+      minPolarAngle={portrait ? 0 : Math.PI * 0.2}
+      // stay above the horizon, and only swing ±40° left/right (no looking at the sides or back)
+      maxPolarAngle={Math.PI * 0.42}
+      minAzimuthAngle={-Math.PI * 0.22}
+      maxAzimuthAngle={Math.PI * 0.22}
+    />
+  )
 }
 
 export default function MoonScene({ items, selectedId, onSelect }: Props) {

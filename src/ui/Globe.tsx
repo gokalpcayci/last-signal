@@ -7,8 +7,8 @@ type LatLon = [number, number]
 /** Maria (dark lunar "seas") are low basins — pick DEM points well below the mean surface. */
 function mariaPoints(metersAt: (lon: number, lat: number) => number): LatLon[] {
   const pts: LatLon[] = []
-  for (let lat = -48; lat <= 48; lat += 3)
-    for (let lon = -54; lon <= 54; lon += 3)
+  for (let lat = -70; lat <= 70; lat += 3)
+    for (let lon = -90; lon <= 90; lon += 3)
       if (metersAt(lon, lat) < -1700) pts.push([lat, lon])
   return pts
 }
