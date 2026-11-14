@@ -79,7 +79,7 @@ export const PLANETS: Record<PlanetId, Planet> = {
   },
   mars: {
     id: 'mars', name: 'Mars', label: 'Mars', radiusKm: 3396,
-    dem: 'terrain/mars', albedo: null,
+    dem: 'terrain/mars', albedo: 'terrain/mars_albedo.png', // MGS TES albedo (scripts/build_mars_albedo.py)
     // 145° W: the ±180° seam falls in the widest gap between landing sites,
     // and Olympus Mons / Tharsis sit near the middle
     lonCenter: -145,
