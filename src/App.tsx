@@ -16,11 +16,12 @@ import NavEdge from './ui/NavEdge'
 import PlanetIcon, { OrbitLabel } from './ui/PlanetIcon'
 import MenuButton from './ui/MenuButton'
 import MobileNav from './ui/MobileNav'
+import SignalMap from './ui/SignalMap'
 import { LedLogo } from './ui/LedLogo'
 import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
 import SignalChart, { TIMELINES } from './ui/SignalChart'
-import StrandedGame from './ui/StrandedGame'
+import SiteClock from './ui/SiteClock'
 import SignalDelay from './ui/SignalDelay'
 import DistanceLadder from './ui/DistanceLadder'
 import { StoryPhoto } from './ui/StoryPhoto'
@@ -301,17 +302,10 @@ export default function App() {
         {/* bottom row */}
         <section className="bottom">
           {terrain
-            ? <StrandedGame key={`stranded-${planet}`} planet={terrain} onSelect={setSelectedId} />
+            ? <SiteClock key={`clock-${planet}`} body={terrain} list={list} selectedId={selectedId} onSelect={setSelectedId} />
             : <SignalDelay onSelect={setSelectedId} />}
 
-          <div className="panel radar">
-            <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />
-            <div className="blip blip--o" style={{ left: '60%', top: '58%' }} />
-            <div className="signal">
-              {selected ? `Last signal: ${fmtDate(selected.lastSignal)}` : 'Listening for signals…'}
-              <b className={selected?.status === 'active' ? 'ok' : 'warn'}>{selected?.status === 'active' ? '●' : '▲'}</b>
-            </div>
-          </div>
+          <SignalMap world={planet} list={list} shown={items} selectedId={selectedId} onSelect={setSelectedId} fmtDate={fmtDate} />
 
           <SignalChart key={`chart-${planet}`} planet={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
         </section>

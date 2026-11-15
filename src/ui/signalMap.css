@@ -1,0 +1,33 @@
+/* Signal map (src/ui/SignalMap.tsx): bottom-middle panel. Keeps the .radar "+" pattern background. */
+.smap { display: flex; flex-direction: column; }
+.smap__title { position: absolute; left: 12px; top: 10px; font: 9px var(--mono); letter-spacing: .12em; color: var(--faint); }
+.smap__field { position: absolute; inset: 26px 14px 34px; }
+
+/* one LED per object; the button is a 24 px hit area, the LED a small square */
+/* --hit: 24 px alone; a site's row of LEDs shares the space (9 px each, still 24 px tall) */
+.smap__dot { position: absolute; width: var(--hit, 24px); height: 24px; margin: -12px 0 0 calc(var(--hit, 24px) / -2); display: grid; place-items: center;
+  color: var(--faint); cursor: pointer; }
+.smap__dot i { width: 5px; height: 5px; background: currentColor; transition: transform .15s ease, box-shadow .15s ease; }
+.smap__dot--active { color: var(--ok); }
+.smap__dot--silent { color: var(--warn); }
+.smap__dot--ghost { color: rgba(230, 230, 223, .14); cursor: default; }
+.smap__dot:not(:disabled):hover i { transform: scale(1.6); }
+.smap__dot.is-on i { background: var(--text); transform: scale(1.6); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
+
+/* signal blink: three quick blinks, then quiet — staggered per object */
+.smap__dot--active i { animation: smap-blink var(--blink-dur, 8s) var(--blink-delay, 0s) infinite steps(1, end); }
+@keyframes smap-blink {
+  0%, 2%, 4% { opacity: .25; box-shadow: none; }
+  1%, 3%, 5% { opacity: 1; box-shadow: 0 0 6px var(--ok); }
+  6%, 100% { opacity: 1; box-shadow: none; }
+}
+.smap__dot.is-on i { animation: none; }
+
+.smap__read { position: absolute; left: 12px; right: 12px; bottom: 10px; font: 9.5px var(--mono); letter-spacing: .06em;
+  color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.smap__read b { font-weight: 400; }
+.smap__read .ok { color: var(--ok); }
+.smap__read .warn { color: var(--warn); }
+.smap__read span { color: var(--faint); margin: 0 4px; }
+
+@media (prefers-reduced-motion: reduce) { .smap__dot--active i { animation: none; } }

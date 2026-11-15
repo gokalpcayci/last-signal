@@ -187,6 +187,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .sig__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .chart .panel__title { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 18px; min-width: 0; }
 .sig__date { flex: none; font: 10px var(--mono); letter-spacing: .06em; color: var(--text); border: 1px solid var(--line-strong); padding: 3px 8px; }
+/* ▶ PLAY sits just left of the date box */
+.sig__play { flex: none; margin-left: auto; font: 10px var(--mono); letter-spacing: .06em; color: var(--dim); border: 1px solid var(--line); padding: 3px 8px; }
+.sig__play:hover { color: var(--text); border-color: var(--line-strong); }
+.sig__play.is-on { color: var(--text); background: #1a1b19; border-color: var(--line-strong); }
 .sig__read { font: 10px var(--mono); letter-spacing: .04em; color: var(--text); }
 .sig__read b { font-weight: 400; margin-right: 6px; }
 .sig__read i { font-style: normal; color: var(--dim); margin-left: 8px; }
@@ -219,44 +223,16 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .asc .hov { background: rgba(255,255,255,0.07); }
 .asc .sel { color: var(--text); background: rgba(255,255,255,0.1); opacity: 1; }
 .radar { background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27%3E%3Cpath d=%27M12 9.5v5M9.5 12h5%27 stroke=%27rgba(255,255,255,0.16)%27 stroke-width=%271%27/%3E%3C/svg%3E") 0 0 / 24px 24px; }
-.blip { position: absolute; width: 22px; height: 22px; border-radius: 50%; border: 1px solid; display: grid; place-items: center; }
-.blip::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.blip--g { color: var(--ok); }
-.blip--o { color: var(--warn); }
-.signal { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); white-space: nowrap;
-  font-size: 11px; background: #161715; border: 1px solid var(--line-strong); padding: 6px 12px; display: flex; gap: 10px; }
-.signal .ok { color: var(--ok); } .signal .warn { color: var(--warn); }
+/* the radar panel's contents: src/ui/SignalMap.tsx + signalMap.css */
 
 .ok { color: var(--ok); } .warn { color: var(--warn); }
 
-/* "Stranded" choice game (src/ui/StrandedGame.tsx, content in src/data/stranded.ts) */
-.game { display: flex; flex-direction: column; min-width: 0; outline: none; }
-.game__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-.game .panel__title { margin: 0; }
-.game__tag { font: 9px var(--mono); letter-spacing: .08em; color: var(--dim); margin-left: 6px; }
-.game__o2 { flex: none; font: 10px var(--mono); letter-spacing: .02em; font-feature-settings: "liga" 0, "calt" 0; }
-.game__log { flex: 1; min-height: 0; overflow-y: auto; font: 11px/1.45 var(--mono); color: #cfcfc6; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
-.game__intro p { margin-bottom: 6px; }
-.game__line { margin-bottom: 5px; }
-.game__line b { font-weight: 400; }
-.game__line--leo b { color: var(--ok); }
-.game__line--you { color: var(--text); }
-.game__line--you b { color: var(--dim); }
-.game__line--fact { color: #d9d6c4; border-left: 2px solid var(--gold); padding-left: 8px; }
-.game__line--fact b { color: var(--gold); }
-.game__line--sys { color: var(--dim); }
-.game__end { margin-top: 4px; }
-.game__end p { margin-bottom: 4px; }
-.game__ref { font: inherit; color: var(--text); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 2px; }
-.game__ref:hover { text-decoration-color: var(--text); }
-.game__choices { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
-.game__choices button { font: 10px var(--mono); letter-spacing: .03em; color: var(--text); border: 1px solid var(--line-strong); padding: 4px 8px; text-align: left; }
-.game__choices button b { font-weight: 400; color: var(--ok); }
-.game__choices button:hover:not(:disabled) { background: #1f201d; }
-.game__choices button:disabled { color: var(--faint); border-color: var(--line); cursor: default; text-decoration: line-through; }
-.game__choices button:disabled b { color: var(--faint); }
-.game__go { color: var(--ok) !important; }
-.game__step { margin-left: auto; font: 9px var(--mono); letter-spacing: .08em; color: var(--dim); }
+/* bottom-left panel: "Day & night now" on the Moon/Mars (src/ui/SiteClock.tsx), message time in Deep Space */
+/* shared bottom-left panel header (SiteClock, SignalDelay) */
+.panel__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.panel__tag { font: 9px var(--mono); letter-spacing: .08em; color: var(--dim); margin-left: 6px; }
+.panel__ref { font: inherit; color: var(--text); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 2px; }
+.panel__ref:hover { text-decoration-color: var(--text); }
 
 .moon { position: absolute; inset: 0; container-type: size;
   /* marker glyph width: ~4.5% of the map's width (or 7% of its height), 16–30 px */
@@ -268,7 +244,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (pointer: coarse) {
   /* the glyph may be small, but the tap area never drops below 32 px */
   .marker { padding: 6px 6px 3px; min-width: 32px; min-height: 32px; }
-  .toolbar button { width: 46px; height: 40px; }
+  /* narrow phones: buttons give up width (never below ~37 px at 320) so the toolbar fits the screen */
+  .toolbar button { width: min(46px, 11.5vw); height: 40px; }
 }
 
 /* ── tablet / small laptop ──────────────────── */
@@ -310,7 +287,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .nav__edge-fill { fill: var(--bg); }
   .nav__edge-line { fill: none; stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
 
-  .scene { position: relative; inset: auto; order: 2; height: min(62svh, calc(100vw + 30px)); min-height: 300px; border-bottom: 1px solid var(--line); }
+  /* overflow: map overlays (probe readout, labels) must never widen the page, or phones zoom out / scroll sideways */
+  .scene { position: relative; inset: auto; order: 2; height: min(62svh, calc(100vw + 30px)); min-height: 300px; border-bottom: 1px solid var(--line); overflow: hidden; }
   .toolbar { position: relative; order: 3; left: auto; bottom: auto; transform: none; align-self: center; margin-top: -48px; z-index: 12; }
 
   .right { position: static; order: 4; width: auto; padding: 18px 16px; border: 0; border-bottom: 1px solid var(--line); overflow: visible; background: none; }
@@ -324,7 +302,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .panel { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
   .sig { flex: none; height: 150px; }
   .radar { height: 110px; }
-  .game { height: 320px; }
+  .clock { height: 300px; }
 }
 
 /* short landscape phones: let the 3D view use most of the height */

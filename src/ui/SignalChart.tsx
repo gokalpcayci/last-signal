@@ -292,6 +292,9 @@ function buildAscii(tl: Timeline, o: {
 }
 
 /** Key by planet: scroll position and measurements belong to one timeline. */
+/** ▶ PLAY: seconds for the whole strip, first landing → today */
+const PLAY_S = 14
+
 export default function SignalChart({ planet, items, selectedId, onSelect, onTime }: {
   planet: WorldId
   items: Hardware[]
@@ -309,6 +312,33 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
   const pan = useRef<{ x: number; left: number; moved: boolean } | null>(null)
   const opened = useRef(false)
   const fracRef = useRef(1) // 0 = axis start at the left edge, 1 = today at the right edge
+
+  // ▶ PLAY: rewind to the first landing and glide to today, so the map fills up mission by mission.
+  // Pixel-linear, so the busy early years (wider on the strip) play slower than the quiet decades.
+  // Any drag, wheel or key on the strip takes back control.
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!playing || !el) return
+    const max = el.scrollWidth - el.clientWidth
+    if (max <= 0) { setPlaying(false); return }
+    if (el.scrollLeft >= max - 1) el.scrollLeft = 0
+    const from = el.scrollLeft, t0 = performance.now(), dur = PLAY_S * 1000 * (1 - from / max)
+    let raf = 0
+    const stop = () => setPlaying(false)
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur)
+      el.scrollLeft = from + (max - from) * k
+      if (k < 1) raf = requestAnimationFrame(tick); else stop()
+    }
+    raf = requestAnimationFrame(tick)
+    const opts = { passive: true }
+    el.addEventListener('pointerdown', stop, opts); el.addEventListener('wheel', stop, opts); el.addEventListener('keydown', stop)
+    return () => {
+      cancelAnimationFrame(raf)
+      el.removeEventListener('pointerdown', stop); el.removeEventListener('wheel', stop); el.removeEventListener('keydown', stop)
+    }
+  }, [playing])
   const tl = TIMELINES[planet]
   const { ARR, END, byArrival, LANE, ROWS, EVENTS, list } = tl
   const { t0: T0, tb: TB, squeeze: SQUEEZE } = tl.cfg
@@ -476,6 +506,9 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
     <div className="panel chart">
       <div className="sig__head">
         <div className="panel__title">{readout}</div>
+        <button className={`sig__play${playing ? ' is-on' : ''}`} aria-pressed={playing}
+          aria-label={playing ? 'Stop the timeline' : `Play the timeline from ${T0} to today`}
+          onClick={() => setPlaying((v) => !v)}>{playing ? '■ STOP' : '▶ PLAY'}</button>
         <span className="sig__date">{fmtT(p)}</span>
       </div>
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { deepSpaceHardware } from '../data/deepspace'
 
 /**
- * Deep Space bottom-left panel (Moon/Mars have the Stranded game here): how long a radio message
+ * Deep Space bottom-left panel (Moon/Mars show "Day & night now" here, src/ui/SiteClock.tsx): how long a radio message
  * takes to reach each craft that still talks. Press PING and watch your message travel in real
  * time — the countdown is the real one-way light time from today's distance.
  * Distances are the JPL snapshot in deepspace.ts (au); light covers 1 AU in 499.005 s.
@@ -37,8 +37,8 @@ export default function SignalDelay({ onSelect }: { onSelect: (id: string) => vo
 
   return (
     <div className="panel delay">
-      <div className="game__head">
-        <div className="panel__title">Message time <span className="game__tag">[LIVE]</span></div>
+      <div className="panel__head">
+        <div className="panel__title">Message time <span className="panel__tag">[LIVE]</span></div>
       </div>
       <p className="delay__lead">Radio waves fly at the speed of light — 300,000 km every second. Ping a probe and see how long your hello takes.</p>
       <ul className="delay__rows">
@@ -49,7 +49,7 @@ export default function SignalDelay({ onSelect }: { onSelect: (id: string) => vo
           const left = secs - gone
           return (
             <li key={h.id}>
-              <button className="game__ref delay__name" onClick={() => onSelect(h.id)}>{h.name.toUpperCase()}</button>
+              <button className="panel__ref delay__name" onClick={() => onSelect(h.id)}>{h.name.toUpperCase()}</button>
               {at == null ? (
                 <>
                   <span className="delay__time">{fmtDur(secs)} one way</span>
