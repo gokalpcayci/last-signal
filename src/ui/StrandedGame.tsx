@@ -3,6 +3,8 @@ import { hardware } from '../data/hardware'
 import { marsHardware } from '../data/mars'
 import { O2, STRANDED } from '../data/stranded'
 import type { PlanetId } from '../scene/planets'
+import { useBooted } from '../boot'
+import TextEffect from './TextEffect'
 
 /**
  * Bottom-left panel: "Stranded", a short choice game, one scenario per body (src/data/stranded*.ts).
@@ -10,7 +12,10 @@ import type { PlanetId } from '../scene/planets'
  * Detours cost extra oxygen and reveal a fact; running out is gentle (an early pickup). Key by planet.
  */
 
-type Line = { who: 'leo' | 'you' | 'fact' | 'sys'; text: string }
+/** d = entrance delay (s), so lines added together arrive one after another */
+type Line = { who: 'leo' | 'you' | 'fact' | 'sys'; text: string; d?: number }
+const LINE_GAP = 0.35
+const stagger = (ls: Line[]) => ls.map((l, k) => ({ ...l, d: k * LINE_GAP }))
 type Phase = 'intro' | 'play' | 'won' | 'lost'
 
 const O2_CELLS = 10
@@ -39,7 +44,7 @@ export default function StrandedGame({ planet, onSelect }: { planet: PlanetId; o
 
   const start = () => {
     setPhase('play'); setStep(0); setO2(O2.start); setTried([]); setVisited([])
-    setLog([...INTRO.map((text) => ({ who: 'sys' as const, text })), { who: 'leo', text: STEPS[0].call }])
+    setLog(stagger([...INTRO.map((text) => ({ who: 'sys' as const, text })), { who: 'leo', text: STEPS[0].call }]))
   }
 
   const choose = (i: number) => {
@@ -61,7 +66,7 @@ export default function StrandedGame({ planet, onSelect }: { planet: PlanetId; o
     } else {
       setPhase('won')
     }
-    setLog((l) => [...l, ...lines])
+    setLog((l) => [...l, ...stagger(lines)])
   }
 
   // number keys 1–3 pick a choice while the panel has focus
@@ -71,6 +76,8 @@ export default function StrandedGame({ planet, onSelect }: { planet: PlanetId; o
   }
 
   const low = o2 <= 30
+  const booted = useBooted() // the intro replays its entrance once the loader is gone
+  const fade = (d = 0) => ({ '--d': `${d}s` }) as React.CSSProperties
   return (
     <div className="panel game" tabIndex={-1} onKeyDown={onKey}>
       <div className="game__head">
@@ -84,20 +91,20 @@ export default function StrandedGame({ planet, onSelect }: { planet: PlanetId; o
 
       <div className="game__log" ref={logRef} aria-live="polite">
         {phase === 'intro' ? (
-          <div className="game__intro">
-            {pitch.map((t) => <p key={t}>{t}</p>)}
+          <div className="game__intro" key={booted ? 'on' : 'off'}>
+            {pitch.map((t, i) => <TextEffect as="p" per="word" key={t} delay={0.2 + i * LINE_GAP}>{t}</TextEffect>)}
           </div>
         ) : log.map((l, i) => (
           <p key={i} className={`game__line game__line--${l.who}`}>
-            {l.who === 'leo' && <b>{ASTRONAUT}&gt;</b>}
-            {l.who === 'you' && <b>MC&gt;</b>}
-            {l.who === 'fact' && <b>FACT&gt;</b>}
-            {' '}{l.text}
+            {l.who === 'leo' && <b className="te-fade" style={fade(l.d)}>{ASTRONAUT}&gt;</b>}
+            {l.who === 'you' && <b className="te-fade" style={fade(l.d)}>MC&gt;</b>}
+            {l.who === 'fact' && <b className="te-fade" style={fade(l.d)}>FACT&gt;</b>}
+            {' '}<TextEffect per="word" delay={l.d}>{l.text}</TextEffect>
           </p>
         ))}
         {phase === 'won' && (
           <div className="game__end">
-            <p className="ok">MISSION COMPLETE · {ASTRONAUT} IS ON THE WAY HOME · O₂ LEFT {o2}%</p>
+            <p className="ok te-fade" style={fade(log.length ? LINE_GAP * 3 : 0)}>MISSION COMPLETE · {ASTRONAUT} IS ON THE WAY HOME · O₂ LEFT {o2}%</p>
             <p>You used {visited.length} pieces of old hardware: {visited.map((id, i) => (
               <span key={id}>{i > 0 && ', '}<button className="game__ref" onClick={() => onSelect(id)}>{nameOf(id)}</button></span>
             ))}. Abandoned, but not forgotten.</p>

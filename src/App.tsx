@@ -17,6 +17,8 @@ import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
 import SignalChart, { TIMELINES } from './ui/SignalChart'
 import StrandedGame from './ui/StrandedGame'
+import TextEffect from './ui/TextEffect'
+import { usePresence } from './ui/usePresence'
 import { exaggeration, setPlanet } from './scene/terrain'
 
 // near-side LOLA elevations run −5.6 … +5.6 km (median −1.3)
@@ -113,6 +115,8 @@ export default function App() {
     return list.filter((h) => (filter === 'all' || h.kind === filter) && ok.has(h.id))
   }, [filter, landed, list, timeline])
   const selected = list.find((h) => h.id === selectedId) ?? null
+  // keep the story on screen while its text plays the exit
+  const [story, leaving] = usePresence(selected)
   const active = list.filter((h) => h.status === 'active').length
 
   return (
@@ -171,24 +175,24 @@ export default function App() {
 
         {/* right column: stat + globe, or story */}
         <section className="right" ref={rightRef}>
-          {selected ? (
-            <div className="story">
+          {story ? (
+            <div className={`story${leaving ? ' is-leaving' : ''}`} key={story.id}>
               <div className="story__head">
-                <span className={`pill pill--${selected.status}`}>{selected.status === 'active' ? 'STILL WORKING' : 'SILENT'}</span>
+                <span className={`pill pill--${story.status}`}>{story.status === 'active' ? 'STILL WORKING' : 'SILENT'}</span>
                 <button className="close" onClick={() => setSelectedId(null)}>×</button>
               </div>
-              <div className="story__mission">{selected.mission.toUpperCase()} · {kindLabel[selected.kind].toUpperCase()}</div>
-              <h2>{selected.name}</h2>
+              <TextEffect className="story__mission" trigger={!leaving}>{`${story.mission.toUpperCase()} · ${kindLabel[story.kind].toUpperCase()}`}</TextEffect>
+              <TextEffect as="h2" trigger={!leaving} delay={0.1}>{story.name}</TextEffect>
               <dl>
-                <dt>Site</dt><dd>{selected.site}</dd>
-                <dt>Arrived</dt><dd>{fmtDate(selected.arrived)}</dd>
-                <dt>Last signal</dt><dd>{fmtDate(selected.lastSignal)}</dd>
-                <dt>Coords</dt><dd>{selected.lat.toFixed(2)}°, {selected.lon.toFixed(2)}°</dd>
+                <dt>Site</dt><dd><TextEffect per="word" trigger={!leaving} delay={0.25}>{story.site}</TextEffect></dd>
+                <dt>Arrived</dt><dd><TextEffect trigger={!leaving} delay={0.3}>{fmtDate(story.arrived)}</TextEffect></dd>
+                <dt>Last signal</dt><dd><TextEffect trigger={!leaving} delay={0.35}>{fmtDate(story.lastSignal)}</TextEffect></dd>
+                <dt>Coords</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${story.lat.toFixed(2)}°, ${story.lon.toFixed(2)}°`}</TextEffect></dd>
               </dl>
-              <SunNow lat={selected.lat} lon={selected.lon} name={selected.mission} body={planet} />
-              <p>{selected.story}</p>
-              <div className="dyk"><span>DID YOU KNOW?</span>{selected.didYouKnow}</div>
-              <a href={selected.source} target="_blank" rel="noreferrer">NASA RECORD →</a>
+              <SunNow lat={story.lat} lon={story.lon} name={story.mission} body={planet} />
+              <TextEffect as="p" per="word" trigger={!leaving} delay={0.45}>{story.story}</TextEffect>
+              <div className="dyk"><span>DID YOU KNOW?</span><TextEffect per="word" trigger={!leaving} delay={0.8}>{story.didYouKnow}</TextEffect></div>
+              <a href={story.source} target="_blank" rel="noreferrer">NASA RECORD →</a>
             </div>
           ) : (
             <>
@@ -241,7 +245,7 @@ export default function App() {
                 aria-label="Lava level in kilometres"
                 onChange={(e) => setLava(Number(e.target.value))}
               />
-              <p>3–4 billion years ago, lava flooded the Moon’s low basins and froze into the dark “seas” (maria) you can still see from Earth.</p>
+              <TextEffect as="p" per="word" delay={0.1}>3–4 billion years ago, lava flooded the Moon’s low basins and froze into the dark “seas” (maria) you can still see from Earth.</TextEffect>
             </div>
           )}
         </div>

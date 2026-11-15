@@ -381,8 +381,11 @@ html.booting .nav .logo { visibility: hidden; }
 .boot--fly { background-color: rgba(13, 14, 13, 0); pointer-events: none; }
 .boot__center { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 0 16px; }
 .boot__logo { display: block; will-change: transform; }
-.boot__fade { display: flex; flex-direction: column; align-items: center; transition: opacity .3s ease; }
-.boot--fly .boot__fade { opacity: 0; }
+.boot__fade { display: flex; flex-direction: column; align-items: center; }
+/* on fly-out the dots fade; the log text plays its own exit (TextEffect), prompts fade a beat later */
+.boot__wake, .boot__years, .boot__skip, .boot__log i, .boot__log .te-fade, .boot__cursor { transition: opacity .3s ease; }
+.boot--fly .boot__wake, .boot--fly .boot__years, .boot--fly .boot__skip { opacity: 0; }
+.boot--fly .boot__log i, .boot--fly .boot__log .te-fade, .boot--fly .boot__cursor { opacity: 0; transition-delay: .2s; }
 
 /* 22 LEDs in landing order: ghost → white flash → status colour */
 .boot__wake { display: flex; gap: 4px; }
@@ -399,15 +402,13 @@ html.booting .nav .logo { visibility: hidden; }
 .boot__years { display: flex; justify-content: space-between; width: 100%; margin-top: 6px;
   font: 9px var(--mono); color: var(--dim); letter-spacing: .08em; }
 
-/* typed mission-control log (fixed height so nothing jumps while lines arrive) */
+/* mission-control log (fixed height so nothing jumps while lines arrive) */
 .boot__log { margin-top: 18px; min-height: calc(5 * 1.7em); width: 44ch; max-width: calc(100vw - 32px);
   font: 11px/1.7 var(--mono); color: var(--text); font-variant-ligatures: none; }
-.boot__line { display: block; width: calc(var(--n, 40) * 1ch); max-width: 100%; overflow: hidden; white-space: pre;
-  animation: boot-type calc(var(--n, 40) * 16ms) steps(var(--n, 40), end) both; }
+.boot__line { display: block; max-width: 100%; white-space: pre; }
 .boot__line i { font-style: normal; color: var(--dim); }
 .boot__line .ok { font-weight: 400; color: var(--ok); }
 .boot__line .warn { font-weight: 400; color: var(--warn); }
-@keyframes boot-type { from { width: 0; } }
 .boot__cursor { color: var(--ok); animation: boot-blink .9s steps(2, start) infinite; }
 @keyframes boot-blink { to { visibility: hidden; } }
 
@@ -416,8 +417,21 @@ html.booting .nav .logo { visibility: hidden; }
 @media (hover: none) { .boot__skip { display: none; } }
 
 .boot--still .boot__dot { animation: none; opacity: .9; background: var(--c); }
-.boot--still .boot__line, .boot--still .boot__cursor { animation: none; }
+.boot--still .boot__cursor, .boot--still .te__p, .boot--still .te-fade { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .boot__dot { animation: none; opacity: .9; background: var(--c); }
-  .boot__line, .boot__cursor { animation: none; }
+  .boot__cursor { animation: none; }
+}
+
+/* ── text effects (src/ui/TextEffect.tsx, src/ui/textScramble.ts) ── */
+.te__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.te__w { display: inline-block; white-space: nowrap; }
+.te__p, .te-fade { display: inline-block; white-space: pre; animation: te-in .5s cubic-bezier(.2, .7, .2, 1) var(--d, 0s) both; }
+.te--out .te__p { animation: te-out .26s ease-in var(--o, 0s) both; }
+@keyframes te-in { from { opacity: 0; filter: blur(6px); transform: translateY(5px); } }
+@keyframes te-out { to { opacity: 0; filter: blur(6px); transform: translateY(-3px); } }
+.story.is-leaving .pill, .story.is-leaving .close, .story.is-leaving dt, .story.is-leaving .dyk span,
+.story.is-leaving .sunnow { opacity: 0; transition: opacity .25s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .te__p, .te-fade, .te--out .te__p { animation: none; }
 }
