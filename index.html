@@ -2,16 +2,71 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Last Signal · Every machine NASA left on the Moon, Mars and in deep space</title>
+    <meta name="description" content="A mission-control map of every machine NASA left behind on the Moon, on Mars and out in deep space. Fly to each landing site, see which ones are still talking, and travel back in time to when they arrived." />
+    <link rel="canonical" href="https://lastsignal.earth/" />
+    <!-- language is picked by ?lang= (then localStorage / browser); no ?lang= = English for crawlers -->
+    <link rel="alternate" hreflang="en" href="https://lastsignal.earth/" />
+    <link rel="alternate" hreflang="tr" href="https://lastsignal.earth/?lang=tr" />
+    <link rel="alternate" hreflang="x-default" href="https://lastsignal.earth/" />
+    <script>
+      // the Turkish version (?lang=tr) is its own page for search engines: point canonical at it
+      if (new URLSearchParams(location.search).get('lang') === 'tr')
+        document.querySelector('link[rel=canonical]').href = 'https://lastsignal.earth/?lang=tr'
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0d0e0d" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Last Signal</title>
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Open Graph / Twitter card (image: bun scripts/build_og.mjs) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Last Signal" />
+    <meta property="og:url" content="https://lastsignal.earth/" />
+    <meta property="og:title" content="Last Signal · Every machine NASA left behind" />
+    <meta property="og:description" content="A mission-control map of the landers, rovers and probes NASA left on the Moon, Mars and in deep space. Which ones are still talking?" />
+    <meta property="og:image" content="https://lastsignal.earth/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Last Signal: an LED inkblot logo beside the title and one light per machine, 9 green still talking, 37 orange gone silent." />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="tr_TR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Last Signal · Every machine NASA left behind" />
+    <meta name="twitter:description" content="A mission-control map of the landers, rovers and probes NASA left on the Moon, Mars and in deep space. Which ones are still talking?" />
+    <meta name="twitter:image" content="https://lastsignal.earth/og.png" />
+    <meta name="twitter:image:alt" content="Last Signal: an LED inkblot logo beside the title and one light per machine, 9 green still talking, 37 orange gone silent." />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Last Signal",
+        "url": "https://lastsignal.earth/",
+        "description": "A mission-control map of every machine NASA left behind on the Moon, on Mars and in deep space, with which ones are still talking.",
+        "image": "https://lastsignal.earth/og.png",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Any (web browser)",
+        "browserRequirements": "Requires WebGL",
+        "inLanguage": ["en", "tr"],
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": [
+          { "@type": "Person", "name": "Gökalp Çaycı" },
+          { "@type": "Person", "name": "Uygar Yıldırım" }
+        ],
+        "about": ["Apollo program", "Mars rovers", "Space probes", "NASA"]
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>Last Signal is an interactive map of every machine NASA left on the Moon, Mars and in deep space. Please turn on JavaScript to explore it.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

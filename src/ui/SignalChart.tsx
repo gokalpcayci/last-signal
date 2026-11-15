@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { T } from '../strings'
+import { track } from '../analytics'
 import { up, useLang } from '../i18n'
 import { loc } from '../data/localize'
 import { hardware, type Hardware } from '../data/hardware'
@@ -515,7 +516,7 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
         <div className="panel__title">{readout}</div>
         <button className={`sig__play${playing ? ' is-on' : ''}`} aria-pressed={playing}
           aria-label={playing ? T().chart.stopAria : T().chart.playAria(T0)}
-          onClick={() => setPlaying((v) => !v)}>{playing ? T().chart.stop : T().chart.play}</button>
+          onClick={() => { if (!playing) track('timeline_play', { world: planet }); setPlaying((v) => !v) }}>{playing ? T().chart.stop : T().chart.play}</button>
         <span className="sig__date">{fmtT(p)}</span>
       </div>
 

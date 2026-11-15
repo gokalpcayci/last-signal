@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { track } from './analytics'
 
 /**
  * Two languages only: English and Turkish. The choice lives in module state (so canvas / non-React
@@ -29,6 +30,7 @@ export const getLang = () => lang
 
 export function setLang(l: Lang) {
   if (l === lang) return
+  track('language', { to: l })
   lang = l
   document.documentElement.lang = l
   try { localStorage.setItem(KEY, l) } catch { /* not saved, still switches */ }

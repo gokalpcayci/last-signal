@@ -36,6 +36,7 @@ import { MOONWALKERS } from './data/crews'
 import TextEffect from './ui/TextEffect'
 import { usePresence } from './ui/usePresence'
 import { exaggeration, setPlanet } from './scene/terrain'
+import { track } from './analytics'
 
 // near-side LOLA elevations run −5.6 … +5.6 km (median −1.3)
 const LAVA_MIN_KM = -5.6
@@ -116,6 +117,7 @@ export default function App() {
   /** keepOpen: the phone drawer stays open and moves on to that world's filters */
   const switchPlanet = (id: WorldId, keepOpen = false) => {
     if (id === planet) return
+    track('world', { to: id })
     setPlanetId(id)
     setSelectedId(null)
     setFilter('all')
@@ -124,6 +126,10 @@ export default function App() {
     if (!keepOpen) setNavOpen(false)
   }
   const rightRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (selectedId) track('select', { id: selectedId, world: planet })
+  }, [selectedId, planet]) // a world switch clears selectedId in the same render, so it never double-counts
 
   // Stacked (phone) layout: the story sits below the 3D view. Let the camera fly first, then bring the story into view.
   useEffect(() => {
@@ -309,7 +315,7 @@ export default function App() {
             className={`toolbar__scale toolbar__globe${globeOn ? ' is-on' : ''}`}
             aria-pressed={globeOn}
             title={globeOn ? t.toolbar.globeOn : t.toolbar.globeOff}
-            onClick={() => { setGlobe((v) => !v); setLava(null) }}
+            onClick={() => { track('globe', { on: !globeOn, world: planet }); setGlobe((v) => !v); setLava(null) }}
           >{t.toolbar.globe}</button>}
           {planet === 'moon' && !globeOn && <button
             className={`toolbar__scale toolbar__lava${lava !== null ? ' is-on' : ''}`}
