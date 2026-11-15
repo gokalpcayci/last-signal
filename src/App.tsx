@@ -11,6 +11,7 @@ import {
   IconPulse, IconShuffle,
 } from './ui/icons'
 import NavEdge from './ui/NavEdge'
+import PlanetIcon, { OrbitLabel } from './ui/PlanetIcon'
 import MenuButton from './ui/MenuButton'
 import { LedLogo } from './ui/LedLogo'
 import BootLoader from './ui/BootLoader'
@@ -163,8 +164,11 @@ export default function App() {
               </ul>
               <div className="planet-switch" role="group" aria-label="Choose a world">
                 {(Object.keys(PLANETS) as PlanetId[]).map((id) => (
-                  <button key={id} className={planet === id ? 'is-on' : ''} aria-pressed={planet === id} onClick={() => switchPlanet(id)}>
-                    {planet === id ? `[${PLANETS[id].label.toUpperCase()}]` : PLANETS[id].label.toUpperCase()}
+                  <button key={id} className={planet === id ? 'is-on' : ''} aria-pressed={planet === id} onClick={() => switchPlanet(id)}
+                    title={`Explore what we left on ${PLANETS[id].name}`}>
+                    <PlanetIcon id={id} active={planet === id} size={stacked ? 34 : 40} />
+                    <OrbitLabel size={stacked ? 34 : 40} text={PLANETS[id].label.toUpperCase()} />
+                    <span className="te__sr">{PLANETS[id].label}</span>
                   </button>
                 ))}
               </div>
