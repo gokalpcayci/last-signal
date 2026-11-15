@@ -18,6 +18,8 @@ export interface Hardware {
   story: string
   didYouKnow: string
   source: string
+  /** Coordinates are an estimate (NASA published none); everything else is NASA-confirmed */
+  approx?: boolean
 }
 
 const NSSDC = 'https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id='
