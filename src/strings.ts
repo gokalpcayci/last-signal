@@ -82,7 +82,7 @@ const en = {
     globeOff: 'See the whole world as a globe',
   },
   globe: {
-    credit: 'GLOBE VIEW · AFTER OFFWORLD ARCHIVE BY UYGAR YILDIRIM · NASA LRO LOLA + WAC / MGS MOLA',
+    credit: 'GLOBE VIEW · NASA LRO LOLA + WAC / MGS MOLA',
   },
   sun: {
     localTime: 'Local time', day: '☀ DAY', night: '☾ NIGHT', ground: 'Ground',
@@ -199,7 +199,7 @@ const en = {
     challenge: 'Abandoned but not Forgotten: Storytelling about NASA’s Discarded Equipment on the Moon and Mars',
     event: 'Local event',
     eventValue: 'Ankara, Türkiye',
-    about: 'We’re a team passionate about space exploration, technology, and interactive storytelling. Lostronomy brings forgotten spacecraft back to life with immersive design, interactive experiences and real NASA data.',
+    about: 'We’re a team passionate about space exploration, technology, and interactive storytelling. Last Signal brings forgotten spacecraft back to life with immersive design, interactive experiences and real NASA data.',
     belief: 'Every mission has a story worth telling, even after its final signal.',
     scopeTag: 'Project scope',
     scope: [
@@ -207,7 +207,7 @@ const en = {
       ['Mars', 'Viking to Perseverance on MGS MOLA terrain, with live day and night at each site'],
       ['Deep space', 'Pioneer, Voyager and New Horizons on their real JPL Horizons paths'],
       ['Time', 'Scroll a timeline from 1966 to today and watch each signal go quiet'],
-      ['Globe & 3D', 'Whole-world globe view and NASA 3D craft models, after Uygar Yıldırım’s Offworld Archive'],
+      ['Globe & 3D', 'Whole-world globe view and NASA 3D craft models'],
     ] as [string, string][],
     dataTag: 'Data',
     data: 'NASA NSSDCA · LRO LOLA · MGS MOLA & TES · NASA Trek global maps · NASA 3D Resources · JPL Horizons · NASA Image and Video Library',
@@ -289,7 +289,7 @@ const tr: Strings = {
     globeOff: 'Bütün dünyayı küre olarak gör',
   },
   globe: {
-    credit: 'KÜRE GÖRÜNÜMÜ · UYGAR YILDIRIM’IN OFFWORLD ARCHIVE’INDAN · NASA LRO LOLA + WAC / MGS MOLA',
+    credit: 'KÜRE GÖRÜNÜMÜ · NASA LRO LOLA + WAC / MGS MOLA',
   },
   sun: {
     localTime: 'Yerel saat', day: '☀ GÜNDÜZ', night: '☾ GECE', ground: 'Zemin',
@@ -406,7 +406,7 @@ const tr: Strings = {
     challenge: 'Terk Edilmiş Ama Unutulmamış: NASA’nın Ay’da ve Mars’ta Bıraktığı Ekipmanların Hikâyesi',
     event: 'Yerel etkinlik',
     eventValue: 'Ankara, Türkiye',
-    about: 'Uzay keşfine, teknolojiye ve etkileşimli hikâye anlatımına tutkulu bir ekibiz. Lostronomy, unutulmuş uzay araçlarını sürükleyici tasarım, etkileşimli deneyimler ve gerçek NASA verileriyle yeniden hayata döndürüyor.',
+    about: 'Uzay keşfine, teknolojiye ve etkileşimli hikâye anlatımına tutkulu bir ekibiz. Last Signal, unutulmuş uzay araçlarını sürükleyici tasarım, etkileşimli deneyimler ve gerçek NASA verileriyle yeniden hayata döndürüyor.',
     belief: 'Her görevin, son sinyalinden sonra bile anlatılmaya değer bir hikâyesi var.',
     scopeTag: 'Proje kapsamı',
     scope: [
@@ -414,7 +414,7 @@ const tr: Strings = {
       ['Mars', 'MGS MOLA arazisi üzerinde Viking’den Perseverance’a, her alanda canlı gece ve gündüz'],
       ['Derin uzay', 'Gerçek JPL Horizons yollarında Pioneer, Voyager ve New Horizons'],
       ['Zaman', '1966’dan bugüne bir zaman çizelgesinde gez, her sinyalin susuşunu izle'],
-      ['Küre ve 3B', 'Bütün dünyayı gösteren küre görünümü ve NASA 3B araç modelleri; Uygar Yıldırım’ın Offworld Archive’ından'],
+      ['Küre ve 3B', 'Bütün dünyayı gösteren küre görünümü ve NASA 3B araç modelleri'],
     ],
     dataTag: 'Veri',
     data: 'NASA NSSDCA · LRO LOLA · MGS MOLA ve TES · NASA Trek küresel haritaları · NASA 3D Resources · JPL Horizons · NASA Görüntü ve Video Kütüphanesi',

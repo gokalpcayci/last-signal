@@ -63,7 +63,7 @@ export default function Credits({ onClose, leaving = false }: { onClose: () => v
 
         <p className="credits__kicker"><span className="credits__dot" aria-hidden />{t.kicker}</p>
         <h1 id="credits-title" className="credits__title">
-          <TextEffect>Lostronomy</TextEffect>
+          <TextEffect>Last Signal</TextEffect>
         </h1>
         <p className="credits__belief"><TextEffect per="word" delay={0.2}>{t.belief}</TextEffect></p>
 

@@ -1,5 +1,5 @@
 """
-Convert NASA's MOLA global Mars elevation map into Lostronomy's compact height
+Convert NASA's MOLA global Mars elevation map into Last Signal's compact height
 grid (same encoding as the Moon: see build_dem.py).
 
 Source: MGS MOLA MEGDR, megt90n000cb.img (+ .lbl) — PDS Geosciences Node

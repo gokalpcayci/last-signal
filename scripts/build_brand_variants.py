@@ -1,4 +1,4 @@
-"""Texture variations of the Lostronomy inkblot mark.
+"""Texture variations of the Last Signal inkblot mark.
 
 Run: python3 scripts/build_brand_variants.py  → public/brand/variants/*.svg
 Every variant fills the same traced shape (BLOT) from build_brand.py; the
@@ -21,7 +21,7 @@ X0, Y0, VW, VH = (float(v) for v in VB.split())
 
 def svg(title: str, defs: str, body: str) -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="{VB}">
-  <title>Lostronomy · {title}</title>
+  <title>Last Signal · {title}</title>
   <defs>
     <clipPath id="blot"><path d="{BLOT}"/></clipPath>{defs}
   </defs>

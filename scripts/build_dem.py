@@ -1,5 +1,5 @@
 """
-Crop NASA's LOLA lunar elevation map to Lostronomy's view and export a compact
+Crop NASA's LOLA lunar elevation map to Last Signal's view and export a compact
 binary height grid for the browser.
 
 Source: NASA SVS CGI Moon Kit — https://svs.gsfc.nasa.gov/4720

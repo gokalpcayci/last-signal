@@ -8,7 +8,7 @@ import { useSyncExternalStore } from 'react'
 export type Lang = 'en' | 'tr'
 export const LANGS: Lang[] = ['en', 'tr']
 
-const KEY = 'lostronomy-lang'
+const KEY = 'lastsignal-lang'
 const isLang = (v: unknown): v is Lang => v === 'en' || v === 'tr'
 
 function initial(): Lang {

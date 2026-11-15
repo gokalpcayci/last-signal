@@ -1,4 +1,4 @@
-# Lostronomy — NASA Hackathon: Abandoned but not Forgotten
+# Last Signal — NASA Hackathon: Abandoned but not Forgotten
 
 > A mission-control style web app that tells the story of the hardware NASA left behind — starting on the Moon.
 
@@ -24,7 +24,7 @@ kid-friendly language with a real mission-control feel.
 4. **Demo video** — recorded from the finished app
 
 ## UI mapping (from reference design)
-| Reference | Lostronomy |
+| Reference | Last Signal |
 |---|---|
 | Wireframe terrain | Lunar DEM (LRO LOLA) as displaced wireframe mesh, elevation-colored |
 | ✅ / ⚠ markers | Active / silent hardware |

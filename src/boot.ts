@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react'
  * The intro plays once per browser session; `?boot` in the URL forces it.
  */
 
-const KEY = 'lostronomy.booted'
+const KEY = 'lastsignal.booted'
 
 function wantsIntro(): boolean {
   if (typeof window === 'undefined') return false

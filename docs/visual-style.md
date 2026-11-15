@@ -1,4 +1,4 @@
-# Lostronomy visual style: effects reference
+# Last Signal visual style: effects reference
 
 A shared vocabulary for directing any section of the app, the demo video or the brand.
 Every effect below exists in the code already. Point at it by name.

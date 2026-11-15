@@ -16,7 +16,7 @@ interface Props {
   className?: string
 }
 
-/** Animated LED-matrix Lostronomy mark (canvas). */
+/** Animated LED-matrix Last Signal mark (canvas). */
 export function LedLogo({
   width = 96, grid = 'coarse', mode = 'random', intro = true, rest = 'ambient', hoverFlash = true, glitch = 1, className,
 }: Props) {
@@ -46,7 +46,7 @@ export function LedLogo({
       ref={ref}
       className={className}
       role="img"
-      aria-label="Lostronomy"
+      aria-label="Last Signal"
       onMouseEnter={hoverFlash ? () => { engine.current?.glitch(undefined, 'tear'); engine.current?.flash('random') } : undefined}
     />
   )

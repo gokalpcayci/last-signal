@@ -1,4 +1,4 @@
-"""Generate the Lostronomy brand SVGs.
+"""Generate the Last Signal brand SVGs.
 
 Run: python3 scripts/build_brand.py
   → public/brand/{mark,mark-black,app-icon,lockup}.svg and public/favicon.svg
@@ -157,7 +157,7 @@ def textured(tone: str) -> str:
 
 def mark(tone: str) -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="{VB}">
-  <title>Lostronomy</title>
+  <title>Last Signal</title>
   <defs>{finish_defs(tone)}
   </defs>
   {textured(tone)}
@@ -167,7 +167,7 @@ def mark(tone: str) -> str:
 
 def mark_flat(fill: str) -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="{VB}">
-  <title>Lostronomy</title>
+  <title>Last Signal</title>
   {blot(fill)}
 </svg>
 """
@@ -182,7 +182,7 @@ def placed(size: float, cx: float, cy: float, inner: str) -> str:
 def app_icon() -> str:
     """Square, transparent: the textured mark alone (no tile)."""
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <title>Lostronomy</title>
+  <title>Last Signal</title>
   <defs>{finish_defs("light")}
   </defs>
   {placed(960, 512, 512, textured("light"))}
@@ -193,7 +193,7 @@ def app_icon() -> str:
 def favicon() -> str:
     """No tile: flat mark, dark ink on light browser chrome, light ink in dark mode."""
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <title>Lostronomy</title>
+  <title>Last Signal</title>
   <style>path {{ fill: {BG}; }} @media (prefers-color-scheme: dark) {{ path {{ fill: {INK}; }} }}</style>
   {placed(64, 32, 32, f'<path d="{BLOT}"/>')}
 </svg>
@@ -202,12 +202,12 @@ def favicon() -> str:
 
 def lockup() -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 300">
-  <title>Lostronomy</title>
+  <title>Last Signal</title>
   <defs>{finish_defs("light")}
   </defs>
   {placed(300, 170, 150, textured("light"))}
   <text x="360" y="168" fill="{INK}" font-family="Inter, system-ui, sans-serif" font-weight="600"
-        font-size="100" letter-spacing="10">LOSTRONOMY</text>
+        font-size="100" letter-spacing="10">LAST SIGNAL</text>
   <text x="364" y="220" fill="#6e706a" font-family="'JetBrains Mono', ui-monospace, monospace"
         font-size="25" letter-spacing="7">ABANDONED · NOT FORGOTTEN</text>
 </svg>

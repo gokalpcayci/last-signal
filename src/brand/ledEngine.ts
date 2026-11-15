@@ -1,7 +1,7 @@
 import { LED_GRIDS, type LedGrid } from './ledCells'
 
 /**
- * Canvas renderer for the animated LED-matrix Lostronomy mark.
+ * Canvas renderer for the animated LED-matrix Last Signal mark.
  *
  * Every mode is an *arrival order* (0..1 per pixel):
  *   random → pure per-pixel randomness
