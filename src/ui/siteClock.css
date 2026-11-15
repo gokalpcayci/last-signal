@@ -1,0 +1,30 @@
+/* "Day & night now" (src/ui/SiteClock.tsx): bottom-left panel on the Moon and Mars. */
+.clock { display: flex; flex-direction: column; min-width: 0; }
+.clock .panel__title { margin: 0; }
+.clock__sum { flex: none; font: 10px var(--mono); letter-spacing: .04em; color: var(--dim); }
+.clock__sum b { font-weight: 400; color: var(--text); }
+.clock__lead { margin: 0 0 6px; font: 10px/1.45 var(--mono); color: var(--dim); }
+
+.clock__rows { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent; }
+.clock__row { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 14px auto auto; align-items: center; gap: 8px;
+  padding: 3px 4px; font: 10px/1.4 var(--mono); letter-spacing: .03em; color: var(--dim); text-align: left;
+  font-variant-ligatures: none; }
+.clock__row:hover { background: #1a1b19; color: var(--text); }
+.clock__row.is-on { background: #1f201d; color: var(--text); }
+.clock__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #cfcfc6; }
+.clock__icon { text-align: center; color: var(--faint); }
+.clock__icon.is-day { color: var(--gold); }
+.clock__strip { white-space: pre; letter-spacing: 0; }
+.clock__strip i { font-style: normal; }
+.clock__strip .day { color: rgba(230, 230, 223, .32); }
+.clock__strip .night { color: rgba(230, 230, 223, .1); }
+.clock__strip .now { color: var(--text); }
+.clock__next { white-space: nowrap; text-align: right; min-width: 15ch; }
+
+/* narrow panels: drop the strip before squeezing the names */
+@container (max-width: 270px) { .clock__strip { display: none; } }
+.clock { container-type: inline-size; }
+
+/* touch: rows are tap targets (≥ 32 px) */
+@media (pointer: coarse) { .clock__row { padding: 8px 4px; } }

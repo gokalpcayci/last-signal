@@ -1,6 +1,7 @@
 /** Nav filter toggle drawn on the logo's own LED engine (same pitch, ghosts, flicker, glitches, signal blink):
  *  an LED picture of the current filter that flickers into a × when the drawer opens. */
 import { useEffect, useRef } from 'react'
+import { useT } from '../strings'
 import { LedEngine } from '../brand/ledEngine'
 import type { LedGrid } from '../brand/ledCells'
 import './menuButton.css'
@@ -17,12 +18,13 @@ export type MenuButtonProps = {
 }
 
 export default function MenuButton(p: MenuButtonProps) {
+  const t = useT()
   const engine = useRef<LedEngine | null>(null)
   return (
     <button
       className={`nav__toggle menu-btn${p.open ? ' is-open' : ''}`}
       aria-expanded={p.open} aria-controls={p.controls}
-      aria-label={`Filter hardware (now: ${p.label})`} title={p.label}
+      aria-label={t.nav.filterNow(p.label)} title={p.label}
       onClick={p.onToggle}
       // same hover as the logo: a small row tear + a random sparkle
       onMouseEnter={() => { engine.current?.glitch(undefined, 'tear'); engine.current?.flash('random') }}
@@ -136,6 +138,20 @@ const GLYPH: Record<string, (g: CanvasRenderingContext2D) => void> = {
     g.lineWidth = 2.4; g.beginPath(); g.moveTo(4, 5); g.lineTo(26, 5); g.moveTo(6, 9); g.lineTo(24, 9); g.moveTo(15, 5); g.lineTo(15, 13); g.stroke()
     g.beginPath(); g.ellipse(15, 16, 5, 4, 0, 0, Math.PI * 2); g.fill()
     g.beginPath(); g.moveTo(11, 19); g.lineTo(7, 25); g.moveTo(19, 19); g.lineTo(23, 25); g.stroke()
+  },
+  probe(g) { // Voyager-style: big dish, bus below, a long boom and the power arm
+    g.beginPath(); g.ellipse(14, 9, 9, 3.6, 0, 0, Math.PI * 2); g.fill()
+    g.fillRect(11, 13, 6, 5)
+    g.lineWidth = 2; g.beginPath(); g.moveTo(17, 16); g.lineTo(28, 25); g.moveTo(11, 17); g.lineTo(4, 24); g.stroke()
+    g.fillRect(3, 23, 4, 4)
+    g.lineWidth = 1.6; g.beginPath(); g.moveTo(14, 9); g.lineTo(14, 3); g.stroke()
+  },
+  telescope(g) { // tube with an open end and a sun shield
+    g.save(); g.translate(15, 15); g.rotate(-0.6)
+    g.fillRect(-9, -4, 16, 8)
+    g.lineWidth = 2; g.beginPath(); g.moveTo(7, -6); g.lineTo(11, -6); g.moveTo(7, 6); g.lineTo(11, 6); g.stroke()
+    g.fillRect(-12, -9, 2.4, 18)
+    g.restore()
   },
 }
 

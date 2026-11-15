@@ -1,7 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { T } from '../strings'
+import { up, useLang } from '../i18n'
+import { loc } from '../data/localize'
 import { hardware, type Hardware } from '../data/hardware'
 import { marsHardware } from '../data/mars'
-import type { PlanetId } from '../scene/planets'
+import type { WorldId } from '../scene/planets'
+import { deepSpaceHardware } from '../data/deepspace'
 
 /**
  * Bottom-right analytics panel: a side-scrolling telemetry printout, 1966 → today
@@ -13,7 +17,6 @@ import type { PlanetId } from '../scene/planets'
  * Nothing moves on its own; it opens scrolled to today, so the whole story is there at first.
  */
 
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 export const NOW = (() => { const d = new Date(); return d.getUTCFullYear() + d.getUTCMonth() / 12 + (d.getUTCDate() - 1) / 365 })()
 
 /** ISO date → decimal year. Non-dates ("Still in use today") mean now. */
@@ -22,23 +25,24 @@ export const toYear = (s: string) => {
   return m ? +m[1] + (+m[2] - 1) / 12 + (+m[3] - 1) / 365 : NOW
 }
 const fmtT = (t: number) => {
-  if (t >= NOW - 0.02) return 'NOW'
+  if (t >= NOW - 0.02) return T().chart.now
   const y = Math.floor(t)
-  return `${MONTHS[Math.min(11, Math.floor((t - y) * 12))]} ${y}`
+  return `${T().chart.months[Math.min(11, Math.floor((t - y) * 12))]} ${y}`
 }
 const fmtDay = (s: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
-  return m ? `${+m[3]} ${MONTHS[+m[2] - 1]} ${m[1]}` : 'NOW'
+  return m ? `${+m[3]} ${T().chart.months[+m[2] - 1]} ${m[1]}` : T().chart.now
 }
 const span = (a: number, b: number) => {
   const d = b - a
-  if (d < 0.08) { const n = Math.max(1, Math.round(d * 365)); return `${n} DAY${n > 1 ? 'S' : ''}` }
-  if (d < 1) return `${Math.round(d * 12)} MO`
-  return `${d.toFixed(1)} YRS`
+  if (d < 0.08) return T().chart.days(Math.max(1, Math.round(d * 365)))
+  if (d < 1) return T().chart.months_(Math.round(d * 12))
+  return T().chart.years(d.toFixed(1))
 }
 
 interface Row { label: string; lanes: number }
-interface Ev { t: number; text: string }
+/** text is read at render time, in the current language */
+interface Ev { t: number; text: () => string }
 interface Tick { text: string; t: number; dx: number }
 
 /** What differs between bodies: the time axis, row labels and how events are narrated. */
@@ -49,24 +53,27 @@ interface TimelineCfg {
   yearsPerScreen: number
   short: (mission: string) => string
   /** caption-row mark for a mission's first landing, or null */
-  mark: (mission: string) => string | null
+  mark: (mission: string) => (() => string) | null
   /** narration for each mission: landing (+ later arrivals / going quiet) */
   missionEvents: (mission: string, hs: Hardware[], ARR: Map<string, number>, END: Map<string, number>) => Ev[]
   ruler: Tick[]
 }
 
 const yr2 = (y: number) => `'${String(y).slice(2)}`
-const UP = (s: string) => s.toUpperCase()
+const UP = (s: string) => up(s)
+/** display name / mission in the current language */
+const nm = (h: Hardware) => UP(loc(h).name)
+const ms = (h: Hardware) => UP(loc(h).mission)
 
 const MOON_CFG: TimelineCfg = {
   // the busy Apollo years get room, the long quiet after 1978 is squeezed 8×
   t0: 1966, tb: 1978, squeeze: 8, yearsPerScreen: 4,
   short: (m) => (m.startsWith('Surveyor') ? 'SURV' : m.replace('Apollo ', 'A')),
-  mark: (m) => (m.startsWith('Apollo') ? m.replace('Apollo ', 'A') : m === 'Surveyor 1' ? 'SURVEYORS' : null),
+  mark: (m) => (m.startsWith('Apollo') ? () => m.replace('Apollo ', 'A') : m === 'Surveyor 1' ? () => T().chart.surveyors : null),
   missionEvents: (m, hs, ARR, END) => {
     const t = ARR.get(hs[0].id)!
-    const ev = [{ t, text: m.startsWith('Surveyor') ? `${UP(m)} LANDS` : `${UP(m)} · ${hs.length} OBJECT${hs.length > 1 ? 'S' : ''} LEFT BEHIND` }]
-    if (m.startsWith('Surveyor')) ev.push({ t: END.get(hs[0].id)!, text: `${UP(m)} GOES QUIET` })
+    const ev: Ev[] = [{ t, text: () => m.startsWith('Surveyor') ? T().chart.lands(ms(hs[0]), false) : T().chart.objectsLeft(ms(hs[0]), hs.length) }]
+    if (m.startsWith('Surveyor')) ev.push({ t: END.get(hs[0].id)!, text: () => T().chart.quiet(ms(hs[0]), false) })
     return ev
   },
   ruler: [
@@ -81,25 +88,43 @@ const MARS_SHORT: Record<string, string> = {
   'Mars Exploration Rover A': 'SPRT', 'Mars Exploration Rover B': 'OPPY', Phoenix: 'PHX',
   'Mars Science Laboratory': 'MSL', InSight: 'INSI', 'Mars 2020': 'M20',
 }
-const names = (hs: Hardware[]) => hs.map((h) => UP(h.name)).join(' + ')
+const names = (hs: Hardware[]) => hs.map(nm).join(' + ')
 const MARS_CFG: TimelineCfg = {
   // missions are spread evenly over 50 years: one plain linear axis, no squeeze
   t0: 1976, tb: NOW, squeeze: 1, yearsPerScreen: 14,
   short: (m) => MARS_SHORT[m] ?? UP(m).slice(0, 4),
-  mark: (m) => MARS_SHORT[m] ?? null,
+  mark: (m) => (MARS_SHORT[m] ? () => MARS_SHORT[m] : null),
   missionEvents: (_m, hs, ARR, END) => {
     const t = ARR.get(hs[0].id)!
     const first = hs.filter((h) => ARR.get(h.id)! - t < 0.01)
-    const ev: Ev[] = [{ t, text: `${names(first)} LAND${first.length > 1 ? '' : 'S'}` }]
+    const ev: Ev[] = [{ t, text: () => T().chart.lands(names(first), first.length > 1) }]
     // later arrivals, e.g. the sample depot dropped two years after landing
-    for (const h of hs) if (!first.includes(h)) ev.push({ t: ARR.get(h.id)!, text: `${UP(h.name)} LEFT BEHIND` })
+    for (const h of hs) if (!first.includes(h)) ev.push({ t: ARR.get(h.id)!, text: () => T().chart.leftBehind(nm(h)) })
     // going quiet: objects that fell silent on the same day share one line
     const quiet = new Map<string, Hardware[]>()
     for (const h of hs) if (h.status === 'silent') quiet.set(h.lastSignal, [...(quiet.get(h.lastSignal) ?? []), h])
-    for (const g of quiet.values()) ev.push({ t: END.get(g[0].id)!, text: `${names(g)} GO${g.length > 1 ? '' : 'ES'} QUIET` })
+    for (const g of quiet.values()) ev.push({ t: END.get(g[0].id)!, text: () => T().chart.quiet(names(g), g.length > 1) })
     return ev
   },
   ruler: Array.from({ length: Math.floor((NOW - 3 - 1976) / 4) + 1 }, (_, i) => ({ text: yr2(1976 + i * 4), t: 1976 + i * 4, dx: 0 })),
+}
+
+const DEEP_SHORT: Record<string, string> = {
+  'Pioneer 10': 'P10', 'Pioneer 11': 'P11', 'Voyager 2': 'VGR2', 'Voyager 1': 'VGR1', 'Ulysses (ESA/NASA)': 'ULYS',
+  'NEAR Shoemaker': 'NEAR', Stardust: 'STAR', 'Spitzer Space Telescope': 'SPTZ', 'Deep Impact / EPOXI': 'DI',
+  'New Horizons': 'NH', Dawn: 'DAWN', 'Kepler / K2': 'KEPL',
+}
+const DEEP_CFG: TimelineCfg = {
+  // launches spread over 1972–2009, then the long cruise: one linear axis
+  t0: 1972, tb: NOW, squeeze: 1, yearsPerScreen: 16,
+  short: (m) => DEEP_SHORT[m] ?? UP(m).slice(0, 4),
+  mark: (m) => (DEEP_SHORT[m] ? () => DEEP_SHORT[m] : null),
+  missionEvents: (_m, hs, ARR, END) => {
+    const ev: Ev[] = [{ t: ARR.get(hs[0].id)!, text: () => T().chart.launches(names(hs)) }]
+    for (const h of hs) if (h.status === 'silent') ev.push({ t: END.get(h.id)!, text: () => T().chart.quiet(nm(h), false) })
+    return ev
+  },
+  ruler: Array.from({ length: Math.floor((NOW - 3 - 1972) / 4) + 1 }, (_, i) => ({ text: yr2(1972 + i * 4), t: 1972 + i * 4, dx: 0 })),
 }
 
 function makeTimeline(list: Hardware[], cfg: TimelineCfg) {
@@ -139,7 +164,7 @@ function makeTimeline(list: Hardware[], cfg: TimelineCfg) {
   })()
 
   // ── event marks for the caption row, and narration (latest event at or before the playhead) ──
-  const MISSION_MARKS: { t: number; label: string }[] = []
+  const MISSION_MARKS: { t: number; label: () => string }[] = []
   const missions = new Map<string, Hardware[]>()
   for (const h of byArrival) { if (!missions.has(h.mission)) missions.set(h.mission, []); missions.get(h.mission)!.push(h) }
   const ev: Ev[] = []
@@ -148,9 +173,9 @@ function makeTimeline(list: Hardware[], cfg: TimelineCfg) {
     if (label) MISSION_MARKS.push({ t: ARR.get(hs[0].id)!, label })
     ev.push(...cfg.missionEvents(m, hs, ARR, END))
   }
-  if (CLIFF) ev.push({ t: CLIFF.t, text: `${CLIFF.count} SCIENCE STATIONS SWITCHED OFF` })
+  if (CLIFF) ev.push({ t: CLIFF.t, text: () => T().chart.cliff(CLIFF.count) })
   const live = list.filter((h) => h.status === 'active').length
-  ev.push({ t: NOW - 0.01, text: `${live} STILL TALKING TODAY` })
+  ev.push({ t: NOW - 0.01, text: () => T().chart.stillToday(live) })
   const EVENTS = ev.sort((a, b) => a.t - b.t)
 
   return {
@@ -162,9 +187,10 @@ function makeTimeline(list: Hardware[], cfg: TimelineCfg) {
 }
 type Timeline = ReturnType<typeof makeTimeline>
 
-export const TIMELINES: Record<PlanetId, Timeline> = {
+export const TIMELINES: Record<WorldId, Timeline> = {
   moon: makeTimeline(hardware, MOON_CFG),
   mars: makeTimeline(marsHardware, MARS_CFG),
+  deep: makeTimeline(deepSpaceHardware, DEEP_CFG),
 }
 
 const GUTTER = 34, PAD = 10
@@ -216,10 +242,10 @@ function buildAscii(tl: Timeline, o: {
     for (let i = 0; i < txt.length; i++) { cap[at + i] = txt[i]; capC[at + i] = k }
     return true
   }
-  if (CLIFF && p >= CLIFF.t) { const txt = `${fmtDay(CLIFF.date)} · ${CLIFF.count} STATIONS OFF ▼`; put(txt, colOf(CLIFF.t) - txt.length + 1, 'warn') }
-  if (atNow) put('TODAY ▼', cols - 7, 'ok')
-  for (const m of MISSION_MARKS) if (m.t <= p) put(`▼${m.label}`, colOf(m.t), 'dim') || put('▼', colOf(m.t), 'dim')
-  if (cfg.squeeze > 1) put('1 TICK = 10 YEARS →', colOf(cfg.tb) + 2, 'faint')
+  if (CLIFF && p >= CLIFF.t) { const txt = T().chart.cliffCap(fmtDay(CLIFF.date), CLIFF.count); put(txt, colOf(CLIFF.t) - txt.length + 1, 'warn') }
+  if (atNow) { const txt = T().chart.today; put(txt, cols - txt.length, 'ok') }
+  for (const m of MISSION_MARKS) if (m.t <= p) put(`▼${m.label()}`, colOf(m.t), 'dim') || put('▼', colOf(m.t), 'dim')
+  if (cfg.squeeze > 1) put(T().chart.tick, colOf(cfg.tb) + 2, 'faint')
   const rows: Run[][] = [toRuns(cap, capC)]
 
   const cliffCol = CLIFF && p >= CLIFF.t ? colOf(CLIFF.t) : -1
@@ -265,21 +291,25 @@ function buildAscii(tl: Timeline, o: {
   const rul = Array<string>(cols).fill('·'), rulC = Array<string>(cols).fill('faint')
   const label = (txt: string, at: number, k: string) => { for (let i = 0; i < txt.length; i++) if (at + i >= 0 && at + i < cols) { rul[at + i] = txt[i]; rulC[at + i] = k } }
   for (const tk of cfg.ruler) label(tk.text, colOf(tk.t) + tk.dx, 'dim')
-  label('NOW', cols - 3, 'dim')
+  { const now = T().chart.now; label(now, cols - now.length, 'dim') }
   if (!atNow && rul[headCol] === '·') { rul[headCol] = '┴'; rulC[headCol] = 'head' } // never over a label
   rows.push(toRuns(rul, rulC))
   return { rows, cols }
 }
 
 /** Key by planet: scroll position and measurements belong to one timeline. */
+/** ▶ PLAY: seconds for the whole strip, first landing → today */
+const PLAY_S = 14
+
 export default function SignalChart({ planet, items, selectedId, onSelect, onTime }: {
-  planet: PlanetId
+  planet: WorldId
   items: Hardware[]
   selectedId: string | null
   onSelect: (id: string) => void
   /** playhead date in decimal years, or null when it sits at today */
   onTime: (t: number | null) => void
 }) {
+  useLang() // strings are read with T() during render; this re-renders on a language switch
   const scrollRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLSpanElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -289,6 +319,33 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
   const pan = useRef<{ x: number; left: number; moved: boolean } | null>(null)
   const opened = useRef(false)
   const fracRef = useRef(1) // 0 = axis start at the left edge, 1 = today at the right edge
+
+  // ▶ PLAY: rewind to the first landing and glide to today, so the map fills up mission by mission.
+  // Pixel-linear, so the busy early years (wider on the strip) play slower than the quiet decades.
+  // Any drag, wheel or key on the strip takes back control.
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!playing || !el) return
+    const max = el.scrollWidth - el.clientWidth
+    if (max <= 0) { setPlaying(false); return }
+    if (el.scrollLeft >= max - 1) el.scrollLeft = 0
+    const from = el.scrollLeft, t0 = performance.now(), dur = PLAY_S * 1000 * (1 - from / max)
+    let raf = 0
+    const stop = () => setPlaying(false)
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur)
+      el.scrollLeft = from + (max - from) * k
+      if (k < 1) raf = requestAnimationFrame(tick); else stop()
+    }
+    raf = requestAnimationFrame(tick)
+    const opts = { passive: true }
+    el.addEventListener('pointerdown', stop, opts); el.addEventListener('wheel', stop, opts); el.addEventListener('keydown', stop)
+    return () => {
+      cancelAnimationFrame(raf)
+      el.removeEventListener('pointerdown', stop); el.removeEventListener('wheel', stop); el.removeEventListener('keydown', stop)
+    }
+  }, [playing])
   const tl = TIMELINES[planet]
   const { ARR, END, byArrival, LANE, ROWS, EVENTS, list } = tl
   const { t0: T0, tb: TB, squeeze: SQUEEZE } = tl.cfg
@@ -420,14 +477,14 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
   const talking = list.filter((h) => ARR.get(h.id)! <= p && END.get(h.id)! >= p - 1e-6).length
   const event = [...EVENTS].reverse().find((ev) => ev.t <= p)
   let readout: React.ReactNode = (
-    <span className="sig__read">{event ? event.text : 'LISTENING FOR SIGNALS…'}<i>{talking} TALKING</i></span>
+    <span className="sig__read">{event ? event.text() : T().chart.listening}<i>{T().chart.talking(talking)}</i></span>
   )
   if (hovered) {
     const a = ARR.get(hovered.id)!, e = END.get(hovered.id)!
     readout = (
       <span className="sig__read">
         <b className={hovered.status === 'active' ? 'ok' : 'warn'}>{hovered.status === 'active' ? '●' : '▲'}</b>
-        {hovered.mission.toUpperCase()} · {hovered.name.toUpperCase()}
+        {ms(hovered)} · {nm(hovered)}
         <i>{fmtDay(hovered.arrived)} → {fmtDay(hovered.lastSignal)} · {span(a, e)}</i>
       </span>
     )
@@ -456,6 +513,9 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
     <div className="panel chart">
       <div className="sig__head">
         <div className="panel__title">{readout}</div>
+        <button className={`sig__play${playing ? ' is-on' : ''}`} aria-pressed={playing}
+          aria-label={playing ? T().chart.stopAria : T().chart.playAria(T0)}
+          onClick={() => setPlaying((v) => !v)}>{playing ? T().chart.stop : T().chart.play}</button>
         <span className="sig__date">{fmtT(p)}</span>
       </div>
 
@@ -467,7 +527,7 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
         <span ref={measureRef} className="asc asc__measure" style={{ fontSize: FS }} aria-hidden>{'0'.repeat(50)}</span>
 
         <div className="sig__scroll" id="sig-strip" ref={scrollRef} tabIndex={0} onScroll={onScroll}
-          role="group" aria-label={`Timeline ${T0} to today. Scroll sideways to move through time.`}
+          role="group" aria-label={T().chart.stripAria(T0)}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
           onPointerLeave={() => { if (!pan.current) setHoverId(null) }}>
           {grid && (
@@ -483,12 +543,12 @@ export default function SignalChart({ planet, items, selectedId, onSelect, onTim
       {/* overview: the whole timeline in one line; ▓ is the slice on screen. Click or drag to jump. */}
       {barN > 0 && (
         <div className="sig__overview" style={textStyle}>
-          <button className="asc" style={{ width: GUTTER }} disabled={scroll.left <= 1} aria-label="Scroll back in time" onClick={() => nudge(-1)}>◀</button>
+          <button className="asc" style={{ width: GUTTER }} disabled={scroll.left <= 1} aria-label={T().chart.back} onClick={() => nudge(-1)}>◀</button>
           <pre className="asc sig__bar" onPointerDown={onBar} onPointerMove={(e) => { if (e.buttons) onBar(e) }}
-            role="scrollbar" aria-controls="sig-strip" aria-orientation="horizontal" aria-valuenow={Math.round(frac * 100)} aria-label="Timeline overview">
+            role="scrollbar" aria-controls="sig-strip" aria-orientation="horizontal" aria-valuenow={Math.round(frac * 100)} aria-label={T().chart.overview}>
             {bar}
           </pre>
-          <button className="asc" disabled={scroll.left >= scroll.max - 1} aria-label="Scroll forward in time" onClick={() => nudge(1)}>▶</button>
+          <button className="asc" disabled={scroll.left >= scroll.max - 1} aria-label={T().chart.fwd} onClick={() => nudge(1)}>▶</button>
         </div>
       )}
     </div>

@@ -1,0 +1,59 @@
+/* Signal map (src/ui/SignalMap.tsx): bottom-middle panel. Keeps .radar sizing, but the "+" pattern
+   is replaced by the ghost LED grid (an SVG pattern on the same pitch the dots snap to). */
+.smap { display: flex; flex-direction: column; background: none; }
+.smap__title { position: absolute; left: 12px; top: 10px; font: 9px var(--mono); letter-spacing: .12em; color: var(--faint); }
+.smap__field { position: absolute; inset: 26px 14px 14px; }
+
+/* one LED per object; the button is a 24 px hit area, the LED a small square */
+/* --hit: 24 px alone; a site's row of LEDs shares the space (9 px each, still 24 px tall) */
+.smap__dot { position: absolute; width: var(--hit, 24px); height: 24px; margin: -12px 0 0 calc(var(--hit, 24px) / -2); display: grid; place-items: center;
+  color: var(--faint); cursor: pointer; }
+.smap__grid { position: absolute; inset: 0; pointer-events: none; }
+.smap__grid pattern rect { fill: rgba(230, 230, 223, .07); } /* ghost LEDs (~7%) */
+.smap__bleed--active { fill: var(--ok); opacity: .14; }
+.smap__bleed--silent { fill: var(--warn); opacity: .09; }
+.smap__dot i { width: 5px; height: 5px; background: currentColor; transition: transform .15s ease, box-shadow .15s ease; }
+.smap__dot--active { color: var(--ok); }
+.smap__dot--silent { color: var(--warn); }
+.smap__dot--ghost { color: rgba(230, 230, 223, .2); cursor: default; }
+.smap__dot:not(:disabled):hover i { transform: scale(1.6); }
+/* selected: the LED itself goes white with a soft bloom (no box); its row + column are "addressed" */
+.smap__dot.is-on i { background: var(--text); transform: scale(1.4); box-shadow: 0 0 8px rgba(230, 230, 223, .55); }
+.smap__dot:focus-visible { outline: none; }
+.smap__dot:focus-visible i { transform: scale(1.6); box-shadow: 0 0 6px currentColor; }
+.smap__grid pattern.smap__addr-led rect { fill: var(--text); }
+.smap__addr-row, .smap__addr-col { opacity: .16; animation: smap-addr .45s both steps(1, end); }
+.smap__addr-col { animation-delay: .06s; }
+@keyframes smap-addr { 0% { opacity: 0; } 25% { opacity: .4; } 45% { opacity: .05; } 70% { opacity: .28; } 100% { opacity: .16; } }
+
+/* flicker-in: lit LEDs stutter on like old hardware, staggered per object (--in-delay) */
+.smap__dot:not(.smap__dot--ghost) { animation: smap-in .5s var(--in-delay, 0s) both steps(1, end); }
+@keyframes smap-in { 0% { opacity: 0; } 20% { opacity: 1; } 35% { opacity: .2; } 55% { opacity: 1; } 70% { opacity: .4; } 85%, 100% { opacity: 1; } }
+
+/* signal blink: three quick blinks, then quiet — staggered per object */
+.smap__dot--active i { animation: smap-blink var(--blink-dur, 8s) var(--blink-delay, 0s) infinite steps(1, end); }
+@keyframes smap-blink {
+  0%, 2%, 4% { opacity: .25; box-shadow: none; }
+  1%, 3%, 5% { opacity: 1; box-shadow: 0 0 6px var(--ok); }
+  6%, 100% { opacity: 1; box-shadow: none; }
+}
+.smap__dot.is-on i { animation: none; }
+
+/* going quiet (timeline playhead passes its last signal): the LED stutters, flashes once and dies to orange.
+   1.1 s = DYING_MS in useDying.ts */
+.smap__dot.is-dying i { animation: smap-die 1.1s both steps(1, end); }
+@keyframes smap-die {
+  0%   { background: var(--ok); opacity: 1; box-shadow: 0 0 6px var(--ok); }
+  8%   { opacity: .15; box-shadow: none; }
+  14%  { background: var(--ok); opacity: 1; box-shadow: 0 0 6px var(--ok); }
+  22%  { opacity: .1; box-shadow: none; }
+  30%  { background: var(--ok); opacity: .8; }
+  38%  { background: var(--text); opacity: 1; box-shadow: 0 0 8px var(--text); }
+  46%  { background: var(--warn); opacity: .05; box-shadow: none; }
+  62%  { opacity: .4; }
+  74%  { opacity: .1; }
+  100% { background: var(--warn); opacity: 1; box-shadow: none; }
+}
+
+
+@media (prefers-reduced-motion: reduce) { .smap__dot--active i, .smap__dot, .smap__addr rect, .smap__dot.is-dying i { animation: none !important; } }

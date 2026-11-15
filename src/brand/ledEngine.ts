@@ -83,6 +83,8 @@ export class LedEngine {
   private morphT0 = -Infinity
   private morphMode: LedMode = 'boot'
   private reduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  private io: IntersectionObserver | null = null
+  private onScreen = true
 
   constructor(canvas: HTMLCanvasElement, opts: LedOptions = {}) {
     this.canvas = canvas
@@ -94,6 +96,15 @@ export class LedEngine {
     if (!ctx) throw new Error('LedEngine: 2D canvas not available')
     this.ctx = ctx
     this.load()
+    // Off-screen (scrolled away, or inside a collapsed drawer) → stop drawing; resume when seen.
+    // Phases are time-based, so a paused intro simply finishes on resume. Background tabs already pause rAF.
+    if (typeof IntersectionObserver !== 'undefined') {
+      this.io = new IntersectionObserver(([e]) => {
+        this.onScreen = e.isIntersecting
+        if (this.onScreen) this.kick()
+      })
+      this.io.observe(canvas)
+    }
   }
 
   private load() {
@@ -230,6 +241,8 @@ export class LedEngine {
   }
 
   destroy() {
+    this.io?.disconnect()
+    this.io = null
     cancelAnimationFrame(this.raf)
     this.raf = 0
     this.done?.()
@@ -250,12 +263,12 @@ export class LedEngine {
   }
 
   private kick() {
-    if (!this.raf) this.raf = requestAnimationFrame(this.tick)
+    if (!this.raf && this.onScreen) this.raf = requestAnimationFrame(this.tick)
   }
 
   private tick = (now: number) => {
     this.raf = 0
-    if (this.render(now)) this.raf = requestAnimationFrame(this.tick)
+    if (this.render(now) && this.onScreen) this.raf = requestAnimationFrame(this.tick)
   }
 
   /** Draw one frame; returns whether another frame is needed. */

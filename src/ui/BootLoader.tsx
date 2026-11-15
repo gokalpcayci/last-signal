@@ -1,6 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LedEngine } from '../brand/ledEngine'
 import { hardware } from '../data/hardware'
+import TextEffect from './TextEffect'
+import { useT } from '../strings'
 import { finishIntro, markBooted, markProgress, useProgress, useSceneReady } from '../boot'
 
 /**
@@ -36,17 +38,13 @@ const bar = (p: number) => {
 
 type Phase = 'run' | 'acquired' | 'fly' | 'gone'
 
-/** One typed log line: types out once, in as many steps as it has characters. */
+/** One log line: a dim prompt + text that fades in from a blur, and blurs out on the fly-out. */
 function Line({ children }: { children: React.ReactNode }) {
-  const el = useRef<HTMLSpanElement>(null)
-  useLayoutEffect(() => {
-    const e = el.current
-    if (e && !e.style.getPropertyValue('--n')) e.style.setProperty('--n', String(e.textContent?.length ?? 0))
-  })
-  return <span ref={el} className="boot__line">{children}</span>
+  return <span className="boot__line"><i>&gt;</i> {children}</span>
 }
 
 export default function BootLoader() {
+  const t = useT().boot
   const canvas = useRef<HTMLCanvasElement>(null)
   const engine = useRef<LedEngine | null>(null)
   const [phase, setPhase] = useState<Phase>('run')
@@ -136,12 +134,13 @@ export default function BootLoader() {
 
   const p = phase === 'run' ? shown : 1
   const acquired = phase !== 'run'
+  const live = phase === 'run' || phase === 'acquired' // false = text plays its exit
   return (
     <div
       className={`boot boot--${phase}${rm ? ' boot--still' : ''}`}
       role="status"
       aria-live="polite"
-      aria-label={acquired ? 'Signal acquired' : 'Loading the Moon'}
+      aria-label={acquired ? t.acquired : t.loading}
       onPointerDown={() => { if (phase === 'run' || phase === 'acquired') setPhase('fly') }}
     >
       <div className="boot__center">
@@ -160,23 +159,31 @@ export default function BootLoader() {
           <div className="boot__years" aria-hidden><span>{FIRST_YEAR}</span><span>{LAST_YEAR}</span></div>
 
           <pre className="boot__log">
-            {lines > 0 && <Line><i>&gt;</i> POWERING UP GROUND STATION</Line>}
-            {lines > 1 && <Line><i>&gt;</i> LISTENING FOR {hardware.length} THINGS LEFT ON THE MOON</Line>}
-            {lines > 2 && <Line><i>&gt;</i> LOADING MOON MAP {bar(p)}</Line>}
+            {lines > 0 && <Line><TextEffect trigger={live}>{t.power}</TextEffect></Line>}
+            {lines > 1 && <Line><TextEffect trigger={live}>{t.listen(hardware.length)}</TextEffect></Line>}
+            {lines > 2 && (
+              <Line>
+                <TextEffect trigger={live}>{t.map}</TextEffect>{' '}
+                <span className="te-fade" style={{ '--d': '.3s' } as React.CSSProperties}>{bar(p)}</span>
+              </Line>
+            )}
             {lines > 3 && (
               <Line>
-                <i>&gt;</i> <b className="ok">{ACTIVE} STILL ANSWER</b> · <b className="warn">{SILENT} WENT QUIET</b>
+                <b className="ok"><TextEffect trigger={live}>{t.answer(ACTIVE)}</TextEffect></b>
+                {' · '}
+                <b className="warn"><TextEffect trigger={live} delay={0.25}>{t.quiet(SILENT)}</TextEffect></b>
               </Line>
             )}
             {acquired && (
               <Line>
-                <i>&gt;</i> {weak && !ready ? 'WEAK SIGNAL — OPENING ANYWAY' : 'SIGNAL ACQUIRED'}<span className="boot__cursor">▌</span>
+                <TextEffect trigger={live}>{weak && !ready ? t.weak : t.ok}</TextEffect>
+                <span className="boot__cursor">▌</span>
               </Line>
             )}
           </pre>
         </div>
       </div>
-      <div className="boot__skip boot__fade" aria-hidden>CLICK OR PRESS ANY KEY TO SKIP</div>
+      <div className="boot__skip boot__fade" aria-hidden>{t.skip}</div>
     </div>
   )
 }

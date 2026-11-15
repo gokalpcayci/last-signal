@@ -1,0 +1,73 @@
+/* Credits sheet (src/ui/Credits.tsx): dark, dashed rules, mono labels, Daktilo names. */
+.credits {
+  position: fixed; inset: 0; z-index: 200; overflow-y: auto; overscroll-behavior: contain;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(20% - 1px), rgba(255, 255, 255, .035) calc(20% - 1px) 20%),
+    rgba(13, 14, 13, .94);
+  backdrop-filter: blur(6px);
+  animation: credits-in .35s ease both;
+}
+@keyframes credits-in { from { opacity: 0 } to { opacity: 1 } }
+
+.credits__sheet { max-width: 640px; margin: 0 auto; padding: 28px 24px 56px; }
+
+.credits__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 56px; }
+.credits__logo { display: block; }
+.credits__tools { display: flex; align-items: center; gap: 18px; }
+.credits__close { font: 400 22px/1 var(--mono); color: var(--dim); width: 32px; height: 32px; transition: color .15s; }
+.credits__close:hover, .credits__close:focus-visible { color: var(--text); }
+.credits__close:focus-visible { outline: 1px dashed var(--line-strong); outline-offset: 2px; }
+
+.credits__kicker { display: flex; align-items: center; gap: 8px; font: 500 10px var(--mono); letter-spacing: .18em; color: var(--dim); }
+.credits__dot { width: 5px; height: 5px; background: var(--ok); animation: credits-blink 2.4s steps(1) infinite; }
+@keyframes credits-blink { 0%, 12%, 24% { opacity: 1 } 6%, 18% { opacity: .15 } }
+
+.credits__title { font: 400 52px/1 var(--display); letter-spacing: -0.05em; margin: 14px 0 18px; }
+.credits__belief { font: 400 14px/1.5 var(--sans); color: #b9b9b0; max-width: 46ch; }
+
+.credits__sec { margin-top: 40px; padding-top: 14px; border-top: 1px dashed var(--line-strong); }
+.credits__label { font: 500 10px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-bottom: 16px; }
+.credits__text { font: 400 13px/1.6 var(--sans); color: #b9b9b0; max-width: 58ch; }
+
+.credits__authors { list-style: none; display: grid; gap: 14px; }
+.credits__authors li { display: grid; grid-template-columns: 28px 1fr auto; align-items: baseline; gap: 12px; }
+.credits__idx { font: 500 10px var(--mono); color: var(--faint); }
+.credits__name { font: 400 39px/1.1 var(--display); letter-spacing: -0.05em; color: var(--text); }
+.credits__trace { font: 11px var(--mono); color: var(--ok); opacity: .55; font-variant-ligatures: none; }
+
+.credits__scope div, .credits__facts div {
+  display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 7px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.credits__scope dt, .credits__facts dt { font: 500 10px/1.9 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.credits__scope dd, .credits__facts dd { font: 400 12.5px/1.6 var(--sans); color: #c9c9c1; }
+.credits__facts { border-top: 0; margin-top: 28px; padding-top: 0; }
+
+.credits__end { margin-top: 48px; font: 500 10px var(--mono); letter-spacing: .18em; color: var(--faint); }
+.credits__cursor { color: var(--dim); margin-left: 4px; animation: credits-cursor 1s steps(1) infinite; }
+@keyframes credits-cursor { 50% { opacity: 0 } }
+
+@media (max-width: 520px) {
+  .credits__sheet { padding: 18px 16px 40px; }
+  .credits__top { margin-bottom: 40px; }
+  .credits__title { font-size: 39px; }
+  .credits__name { font-size: 26px; }
+  .credits__trace { display: none; }
+  .credits__authors li { grid-template-columns: 24px 1fr; }
+  .credits__scope div, .credits__facts div { grid-template-columns: 1fr; gap: 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .credits, .credits__dot, .credits__cursor { animation: none; }
+}
+
+/* ── language switch + credits link (desktop: top-right under the planet discs) ── */
+.lang { display: flex; gap: 6px; font: 500 10px var(--mono); letter-spacing: .12em; }
+.lang button { color: var(--dim); padding: 2px 0; transition: color .15s; }
+.lang button:hover { color: #b9b9b0; }
+.lang button.is-on { color: var(--text); }
+.lang button:focus-visible { outline: 1px dashed var(--line-strong); outline-offset: 2px; }
+
+.meta { position: absolute; z-index: 10; top: 92px; right: 32px; display: flex; align-items: center; gap: 14px; }
+.meta__credits { font: 500 10px var(--mono); letter-spacing: .12em; color: var(--dim); transition: color .15s; }
+.meta__credits:hover { color: var(--text); }
+.meta__credits:focus-visible { outline: 1px dashed var(--line-strong); outline-offset: 2px; }
