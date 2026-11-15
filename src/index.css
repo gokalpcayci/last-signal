@@ -82,6 +82,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .planet-switch button > * { grid-area: 1 / 1; }
 .orbit-label { display: block; overflow: visible; pointer-events: none; }
 .orbit-label text { font: 500 7.5px var(--mono); letter-spacing: .2em; fill: currentColor; font-variant-ligatures: none; }
+/* longer names (DEEP SPACE / DERİN UZAY): smaller and tighter so they stay on the arc */
+.orbit-label--long text { font-size: 6px; letter-spacing: .1em; }
 .planet-switch button:hover { color: #b9b9b0; }
 .planet-switch button.is-on { color: var(--text); }
 .planet-icon { display: block; opacity: .7; transition: opacity .2s ease; }

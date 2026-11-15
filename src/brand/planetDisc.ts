@@ -107,17 +107,23 @@ export async function planetMask(id: PlanetId, date = new Date(), n = DISC): Pro
 export function deepMask(n = DISC): Float32Array {
   const out: number[] = []
   const R = n / 2
-  const probe = { u: 0.62, v: -0.62 } // top right
+  const probe = { u: 0.64, v: -0.6 }          // top right, outside the orbit
+  const planet = { u: -0.46, v: 0.22 }        // sitting on the orbit, lower left
+  const lit = (u: number, v: number, p: { u: number; v: number }, rad: number) => Math.hypot(u - p.u, v - p.v) < rad
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
     const u = (x + 0.5 - R) / R, v = (y + 0.5 - R) / R
     const r2 = u * u + v * v
     if (r2 > 1) continue
     const r = Math.sqrt(r2), a = Math.atan2(v, u)
     let m = 0
-    if (r < 0.17) m = 1                                                    // Sun
-    else if (Math.abs(r - 0.42) < 0.05 && Math.sin(a * 9) > -0.2) m = NIGHT // inner orbit, dotted
-    else if (Math.abs(r - 0.74) < 0.05 && Math.sin(a * 15) > -0.2) m = NIGHT // outer orbit, dotted
-    if (Math.hypot(u - probe.u, v - probe.v) < 0.12) m = 1                  // the probe
+    if (r < 0.13) m = 1                                                         // the Sun: a solid core…
+    else if (r < 0.2) m = NIGHT                                                 // …with a dim glow
+    else if (Math.abs(r - 0.5) < 0.05 && Math.cos(a * 14) > 0) m = 0.8           // one orbit, evenly dotted
+    if (lit(u, v, planet, 0.09)) m = 1                                          // a planet on it
+    // the probe, leaving: bright head + two fading trail LEDs back toward the Sun
+    if (lit(u, v, probe, 0.09)) m = 1
+    else if (lit(u, v, { u: probe.u * 0.8, v: probe.v * 0.8 }, 0.06)) m = Math.max(m, 0.7)
+    else if (lit(u, v, { u: probe.u * 0.64, v: probe.v * 0.64 }, 0.05)) m = Math.max(m, 0.45)
     out.push(m)
   }
   return Float32Array.from(out)

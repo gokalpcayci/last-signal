@@ -76,6 +76,16 @@ const G: Record<string, string> = {
 }
 for (const [k, v] of Object.entries(G)) if (v.length !== 15) throw new Error(`ledLayer font: bad glyph ${k}`)
 
+/**
+ * Turkish letters: the base glyph plus marks one LED-row above (dot / breve / umlaut) or below
+ * (cedilla). Columns of the mark dots, 0–2. Labels sit on plates with a few px of padding, so the
+ * extra row stays inside them.
+ */
+const MARKS: Record<string, { base: string; row: -1 | 5; cols: number[] }> = {
+  'İ': { base: 'I', row: -1, cols: [1] }, 'Ö': { base: 'O', row: -1, cols: [0, 2] }, 'Ü': { base: 'U', row: -1, cols: [0, 2] },
+  'Ğ': { base: 'G', row: -1, cols: [0, 2] }, 'Ş': { base: 'S', row: 5, cols: [1] }, 'Ç': { base: 'C', row: 5, cols: [1] },
+}
+
 export const MICRO = 2           // css px between small LEDs
 export const GLYPH_W = 4         // 3 columns + 1 gap, in small LEDs
 
@@ -91,12 +101,15 @@ export function microText({ g, pr }: Ctx, s: string, x: number, y: number, color
   g.globalAlpha = alpha
   let cx = x * pr
   const cy = y * pr
-  for (const ch of s.toUpperCase()) {
-    const rows = G[ch] ?? G['?']
+  // uppercase by the page language (i18n.ts sets <html lang>): Turkish i → İ, English i → I
+  for (const ch of s.toLocaleUpperCase(document.documentElement.lang || 'en')) {
+    const mark = MARKS[ch]
+    const rows = G[mark ? mark.base : ch] ?? G['?']
     for (let i = 0; i < 15; i++) {
       if (rows[i] !== '#') continue
       g.fillRect(Math.round(cx + (i % 3) * d), Math.round(cy + Math.floor(i / 3) * d), dot, dot)
     }
+    if (mark) for (const c of mark.cols) g.fillRect(Math.round(cx + c * d), Math.round(cy + mark.row * d), dot, dot)
     cx += GLYPH_W * d
   }
   g.globalAlpha = 1

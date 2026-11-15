@@ -9,7 +9,7 @@ import { useT } from './strings'
 import { up, useLang, locale } from './i18n'
 import { useLoc } from './data/localize'
 import LangSwitch from './ui/LangSwitch'
-import Credits, { useCreditsRoute } from './ui/Credits'
+import Credits, { CREDITS_EXIT_MS, useCreditsRoute } from './ui/Credits'
 import { marsHardware } from './data/mars'
 import { deepSpaceHardware } from './data/deepspace'
 import { WORLDS, isPlanet, type WorldId } from './scene/planets'
@@ -27,7 +27,7 @@ import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
 import SignalChart, { TIMELINES, toYear } from './ui/SignalChart'
 import SiteClock from './ui/SiteClock'
-import SignalDelay from './ui/SignalDelay'
+import DeepKey from './ui/DeepKey'
 import DistanceLadder from './ui/DistanceLadder'
 import { StoryPhoto } from './ui/StoryPhoto'
 import TextEffect from './ui/TextEffect'
@@ -81,6 +81,8 @@ export default function App() {
   const lang = useLang()
   const L = useLoc()
   const [creditsOpen, setCreditsOpen] = useCreditsRoute()
+  // keep the sheet mounted while its power-off plays
+  const [creditsShown, creditsLeaving] = usePresence(creditsOpen ? true : null, CREDITS_EXIT_MS)
   const worldLabel = t.world.label[planet]
   const where = t.world.where[planet]
   const list = HARDWARE[planet]
@@ -157,7 +159,7 @@ export default function App() {
   return (
     <div className="page">
       {introPlays && <BootLoader />}
-      {creditsOpen && <Credits onClose={() => setCreditsOpen(false)} />}
+      {creditsShown && <Credits leaving={creditsLeaving} onClose={() => setCreditsOpen(false)} />}
       <div className="frame">
 
         {/* coordinate grid */}
@@ -316,7 +318,7 @@ export default function App() {
         <section className="bottom">
           {terrain
             ? <SiteClock key={`clock-${planet}`} body={terrain} list={list} selectedId={selectedId} onSelect={setSelectedId} />
-            : <SignalDelay onSelect={setSelectedId} />}
+            : <DeepKey />}
 
           <SignalMap world={planet} list={list} shown={items} talking={talking} selectedId={selectedId} onSelect={setSelectedId} />
 

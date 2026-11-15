@@ -11,7 +11,7 @@ import type { WorldId } from './scene/planets'
 
 const en = {
   world: {
-    label: { moon: 'Moon', mars: 'Mars', deep: 'Deep' } as Record<WorldId, string>,
+    label: { moon: 'Moon', mars: 'Mars', deep: 'Deep space' } as Record<WorldId, string>,
     /** "Left on the Moon" / "Explore what we left on Mars" */
     where: { moon: 'on the Moon', mars: 'on Mars', deep: 'in deep space' } as Record<WorldId, string>,
     choose: 'Choose a world',
@@ -168,6 +168,11 @@ const en = {
     equinox: '♈ EQUINOX', north: '↑ N',
     key: 'KEY',
     legend: ['TALKING', 'SILENT', 'TELESCOPE / LANDER', 'LAST SIGNAL', 'PLANET', 'FLYBY', "SUN'S BUBBLE EDGE", 'INTERSTELLAR'],
+    keyTitle: 'Map key',
+    keyHelp: [
+      'still sends signals home', 'no longer heard from', 'telescope · lander on a rock', 'where it was last heard',
+      'bright tail = way it moves', 'close pass by a planet', 'heliopause, ~120 AU', 'the space between stars',
+    ],
     group: 'Group of craft — zoom in',
   },
   credits: {
@@ -199,7 +204,7 @@ export type Strings = typeof en
 
 const tr: Strings = {
   world: {
-    label: { moon: 'Ay', mars: 'Mars', deep: 'Derin' },
+    label: { moon: 'Ay', mars: 'Mars', deep: 'Derin uzay' },
     where: { moon: 'Ay’da', mars: 'Mars’ta', deep: 'derin uzayda' },
     choose: 'Bir dünya seç',
     explore: (where) => `${where} bıraktıklarımızı keşfet`,
@@ -355,6 +360,11 @@ const tr: Strings = {
     equinox: '♈ EKİNOKS', north: '↑ K',
     key: 'ANAHTAR',
     legend: ['KONUŞUYOR', 'SESSİZ', 'TELESKOP / İNİŞ', 'SON SİNYAL', 'GEZEGEN', 'YAKIN GEÇİŞ', 'GÜNEŞ BALONU SINIRI', 'YILDIZLARARASI'],
+    keyTitle: 'Harita anahtarı',
+    keyHelp: [
+      'hâlâ sinyal yolluyor', 'artık sesi gelmiyor', 'teleskop · kayaya inen araç', 'son kez duyulduğu yer',
+      'parlak iz = gidiş yönü', 'gezegenin yakınından geçiş', 'heliopoz, ~120 AB', 'yıldızlar arası boşluk',
+    ],
     group: 'Araç grubu — yakınlaştır',
   },
   credits: {
