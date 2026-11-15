@@ -2,7 +2,7 @@
 
 Source: https://www.spaceappschallenge.org/2026/challenges/nasas-discarded-equipment-storytelling/?tab=resources
 
-- **NSSDCA** (master catalog — mission parameters, final resting place, status): https://nssdc.gsfc.nasa.gov/
+- **NSSDCA** (master catalog — mission parameters, final resting place, and status): https://nssdc.gsfc.nasa.gov/
 
 ## Moon (Phase 1)
 - Apollo Lunar Modules (descent stages left as launch pads): https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id=1969-059C
