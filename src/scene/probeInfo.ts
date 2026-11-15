@@ -1,3 +1,5 @@
+import { num } from '../i18n'
+import { loc } from '../data/localize'
 import type { Feature } from '../data/features'
 import type { Hardware } from '../data/hardware'
 
@@ -50,7 +52,7 @@ export function nearestSite(lon: number, lat: number, items: Hardware[], r: numb
     const km = distanceKm(lon, lat, h.lon, h.lat, r)
     if (best && km >= best.km) continue
     const active = items.some((o) => o.mission === h.mission && o.status === 'active')
-    best = { name: h.mission, km, arrow: arrowTo(lon, lat, h.lon, h.lat), inside: km < 5, active }
+    best = { name: loc(h).mission, km, arrow: arrowTo(lon, lat, h.lon, h.lat), inside: km < 5, active }
   }
   return best
 }
@@ -61,4 +63,4 @@ export function heightGauge(p: number, cells = 9) {
   return { before: '·'.repeat(i), after: '·'.repeat(cells - 1 - i) }
 }
 
-export const fmtKm = (km: number) => (km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString('en-US'))
+export const fmtKm = (km: number) => (km < 10 ? km.toFixed(1) : num(Math.round(km)))

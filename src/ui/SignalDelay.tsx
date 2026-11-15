@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { deepSpaceHardware } from '../data/deepspace'
 import { sendPing } from '../scene/pings'
+import { useT } from '../strings'
+import { up } from '../i18n'
+import { loc } from '../data/localize'
 
 /**
  * Deep Space bottom-left panel (Moon/Mars show "Day & night now" here, src/ui/SiteClock.tsx): how long a radio message
@@ -26,6 +29,7 @@ const bar = (f: number) => {
 }
 
 export default function SignalDelay({ onSelect }: { onSelect: (id: string) => void }) {
+  const t = useT().delay
   const crafts = deepSpaceHardware.filter((h) => h.status === 'active').sort((a, b) => b.au - a.au)
   const [sent, setSent] = useState<Record<string, number>>({})
   const [now, setNow] = useState(() => Date.now())
@@ -39,9 +43,9 @@ export default function SignalDelay({ onSelect }: { onSelect: (id: string) => vo
   return (
     <div className="panel delay">
       <div className="panel__head">
-        <div className="panel__title">Message time <span className="panel__tag">[LIVE]</span></div>
+        <div className="panel__title">{t.title} <span className="panel__tag">[{useT().story.live}]</span></div>
       </div>
-      <p className="delay__lead">Radio waves fly at the speed of light — 300,000 km every second. Ping a probe and see how long your hello takes.</p>
+      <p className="delay__lead">{t.lead}</p>
       <ul className="delay__rows">
         {crafts.map((h) => {
           const secs = h.au * SEC_PER_AU
@@ -50,18 +54,18 @@ export default function SignalDelay({ onSelect }: { onSelect: (id: string) => vo
           const left = secs - gone
           return (
             <li key={h.id}>
-              <button className="panel__ref delay__name" onClick={() => onSelect(h.id)}>{h.name.toUpperCase()}</button>
+              <button className="panel__ref delay__name" onClick={() => onSelect(h.id)}>{up(loc(h).name)}</button>
               {at == null ? (
                 <>
-                  <span className="delay__time">{fmtDur(secs)} one way</span>
-                  <button className="delay__ping" onClick={() => { setSent((s) => ({ ...s, [h.id]: Date.now() })); setNow(Date.now()); sendPing(h.id) /* the map plays the trip */ }}>[ PING ]</button>
+                  <span className="delay__time">{t.oneWay(fmtDur(secs))}</span>
+                  <button className="delay__ping" onClick={() => { setSent((s) => ({ ...s, [h.id]: Date.now() })); setNow(Date.now()); sendPing(h.id) /* the map plays the trip */ }}>{t.ping}</button>
                 </>
               ) : left > 0 ? (
                 <span className="delay__fly ok">
-                  {bar(gone / secs)} ARRIVES IN {clock(left)}
+                  {bar(gone / secs)} {t.arrives(clock(left))}
                 </span>
               ) : (
-                <span className="delay__fly ok">MESSAGE ARRIVED · REPLY IN {clock(Math.max(0, 2 * secs - gone))}</span>
+                <span className="delay__fly ok">{t.arrived(clock(Math.max(0, 2 * secs - gone)))}</span>
               )}
             </li>
           )

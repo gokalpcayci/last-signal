@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Hardware } from '../data/hardware'
 import type { WorldId } from '../scene/planets'
 import { statusAt, useDying } from './useDying'
+import { useT } from '../strings'
+import { loc } from '../data/localize'
 import './signalMap.css'
 
 /**
@@ -26,7 +28,6 @@ type Props = {
 const PITCH = 9  // LED grid pitch (css px); a site's row of objects uses neighbouring cells
 const LED = 5    // LED square size
 const PAD = 1    // cells kept free along each edge
-const TITLE: Record<WorldId, string> = { moon: 'SIGNAL MAP · MOON', mars: 'SIGNAL MAP · MARS', deep: 'SIGNAL MAP · SKY' }
 
 /** deterministic 0..1 from an id, so blink timing is stable between renders */
 const hash = (s: string) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return ((h >>> 0) % 1000) / 1000 }
@@ -70,6 +71,7 @@ function layout(list: Hardware[], cols: number, rows: number) {
 }
 
 export default function SignalMap({ world, list, shown, talking, selectedId, onSelect }: Props) {
+  const t = useT()
   const dying = useDying(shown, talking)
   const fieldRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
@@ -110,7 +112,7 @@ export default function SignalMap({ world, list, shown, talking, selectedId, onS
 
   return (
     <div className="panel radar smap">
-      <div className="smap__title">{TITLE[world]}</div>
+      <div className="smap__title">{t.map.title[world]}</div>
       <div className="smap__field" ref={fieldRef}>
         {size && (
           <svg className="smap__grid" width={size.w} height={size.h} aria-hidden="true">
@@ -149,7 +151,7 @@ export default function SignalMap({ world, list, shown, talking, selectedId, onS
           return (
             <button key={h.id} className={`smap__dot smap__dot--${state}${h.id === selectedId ? ' is-on' : ''}${dying.has(h.id) ? ' is-dying' : ''}`} style={style}
               onClick={() => onSelect(h.id)} disabled={state === 'ghost'}
-              aria-label={`${h.name}: ${state === 'active' ? 'still working' : 'silent'}`} title={h.name}>
+              aria-label={`${loc(h).name}: ${state === 'active' ? t.map.still : t.map.silent}`} title={loc(h).name}>
               <i />
             </button>
           )

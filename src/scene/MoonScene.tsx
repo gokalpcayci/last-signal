@@ -10,10 +10,13 @@ import { subsolarLon } from './sun'
 import type { Hardware } from '../data/hardware'
 import { features, marsFeatures } from '../data/features'
 import { STACKED_QUERY } from '../layout'
-import { FeatureProjector, LaserBeams, Traverses } from './overlays'
+import { FeatureProjector, Traverses } from './overlays'
 import { isBooted, markProgress, markSceneReady, useBooted } from '../boot'
 import { statusAt, useDying } from '../ui/useDying'
 import { fmtKm, heightGauge, nearestFeature, nearestSite } from './probeInfo'
+import { up, useLang, num } from '../i18n'
+import { loc } from '../data/localize'
+import { T } from '../strings'
 
 interface Props {
   items: Hardware[]
@@ -305,6 +308,7 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
 /** Key this component by planet: it reads the active planet (terrain.ts) once per mount. */
 export default function MoonScene({ items, selectedId, onSelect, trueScale, lavaLevel, talking }: Props) {
   const dying = useDying(items, talking)
+  useLang() // marker labels re-render on a language switch
   const planet = activePlanet()
   const isMoon = planet.id === 'moon'
   const feats = isMoon ? features : marsFeatures
@@ -321,10 +325,6 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
   const els = useRef(new Map<string, HTMLElement>())
   const featureEls = useRef(new Map<string, HTMLElement>())
 
-  // Laser beam only on the selected mirror: nothing to animate or draw otherwise.
-  const reflectors = useMemo(() => items
-    .filter((h) => h.kind === 'reflector' && h.id === selectedId && positions.has(h.id))
-    .map((h) => { const p = positions.get(h.id)!; return { id: h.id, x: p[0], z: p[2] } }), [items, selectedId, positions])
   const rovers = useMemo(() => new Set(items.filter((h) => h.kind === 'rover').map((h) => h.id)), [items])
   const selectedMission = items.find((h) => h.id === selectedId)?.mission ?? null
   const probeLabel = useRef<HTMLDivElement>(null)
@@ -341,7 +341,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
     P.place.textContent = place ? place.name : ''
     P.placeDir.textContent = place && !place.inside ? `${place.arrow} ${fmtKm(place.km)} km` : ''
     const m = Math.round(meters)
-    P.elev.textContent = `${m >= 0 ? '+' : '−'}${Math.abs(m).toLocaleString('en-US')} m`
+    P.elev.textContent = `${m >= 0 ? '+' : '−'}${num(Math.abs(m))} m`
     const g = heightGauge(dem ? dem.percentileOf(meters) : 0.5)
     P.g1.textContent = g.before
     P.g2.textContent = g.after
@@ -349,8 +349,8 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
     P.siteRow.style.display = site ? '' : 'none'
     if (site) {
       P.siteRow.classList.toggle('is-active', site.active)
-      P.site.textContent = site.name.toUpperCase()
-      P.siteDir.textContent = site.inside ? 'HERE' : `${site.arrow} ${fmtKm(site.km)} km`
+      P.site.textContent = up(site.name)
+      P.siteDir.textContent = site.inside ? T().probe.here : `${site.arrow} ${fmtKm(site.km)} km`
     }
     // the box grows toward the middle of the map, never off its edge
     const w = label.parentElement?.clientWidth ?? 0
@@ -384,7 +384,6 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
         <color attach="background" args={[BG]} />
         <fog attach="fog" args={[BG, ...planet.fog]} />
         {dem && <Terrain dem={dem} trueScale={trueScale} lavaLevel={lavaLevel} onProbe={onProbe} />}
-        {dem && polesOn && reflectors.length > 0 && <LaserBeams dem={dem} anchors={reflectors} />}
         {dem && polesOn && isMoon && <Traverses dem={dem} visibleRovers={rovers} highlightMission={selectedMission} />}
         {dem && <Projector dem={dem} positions={positions} els={els} />}
         {dem && <FeatureProjector dem={dem} features={feats} els={featureEls} />}
@@ -396,7 +395,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
           <polyline points="10,18 22,6 34,6" />
         </svg>
         {/* two rows split by the leader line running through: place + elevation / gauge + nearest site */}
-        <div className="probe__box">
+        <div className="probe__box" lang="en" /* Latin names + LO/HI: English caps, no dotted İ */>
           <span className="probe__place"><span ref={part('place')} /><span className="probe__dir" ref={part('placeDir')} /></span>
           <b className="probe__elev" ref={part('elev')} />
           <i className="probe__rule" />
@@ -407,7 +406,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
         </div>
       </div>
 
-      <div className={`features${dem ? ' is-on' : ''}`} aria-hidden>
+      <div className={`features${dem ? ' is-on' : ''}`} lang="la" aria-hidden>
         {feats.map((f) => (
           <span
             key={f.name}
@@ -425,8 +424,8 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
             ref={(el) => { if (el) els.current.set(h.id, el); else els.current.delete(h.id) }}
             className={`marker marker--${statusAt(h, talking)}${h.id === selectedId ? ' is-selected' : ''}${dying.has(h.id) ? ' is-dying' : ''}`}
             onClick={() => onSelect(h.id)}
-            aria-label={`${h.mission} — ${h.name}`}
-            data-label={`${h.mission.toUpperCase()} · ${h.name}`}
+            aria-label={`${loc(h).mission} — ${loc(h).name}`}
+            data-label={`${up(loc(h).mission)} · ${loc(h).name}`}
             style={{ display: 'none', '--ping-delay': `${BOOT_MARKERS_START_S + (order.get(h.id) ?? 0) * BOOT_MARKER_STEP_S}s` } as React.CSSProperties}
           >
             <span className="marker__ink" />

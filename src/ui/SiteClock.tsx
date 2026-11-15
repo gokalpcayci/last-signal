@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import type { Hardware } from '../data/hardware'
 import type { PlanetId } from '../scene/planets'
 import { subsolarLon, sunAtSite } from '../scene/sun'
+import { useT, type Strings } from '../strings'
+import { up } from '../i18n'
+import { loc } from '../data/localize'
 import './siteClock.css'
 
 /**
@@ -21,23 +24,20 @@ type Props = {
 }
 
 const CELLS = 12 // one local day, 2 sun-hours per cell
-const LEAD: Record<PlanetId, string> = {
-  moon: 'A day on the Moon lasts about 29.5 Earth days: two weeks of sunlight, then two weeks of night.',
-  mars: 'A day on Mars (a sol) lasts 24 h 40 min, a little longer than ours.',
-}
 
 const wrap = (h: number) => ((h % 24) + 24) % 24
-const fmtWait = (days: number) => {
+const fmtWait = (days: number, c: Strings['clock']) => {
   const h = days * 24
-  if (h >= 24) return `${Math.floor(days)} D ${Math.floor(h % 24)} H`
-  return `${Math.floor(h)} H ${String(Math.floor((h * 60) % 60)).padStart(2, '0')} M`
+  if (h >= 24) return `${Math.floor(days)} ${c.d} ${Math.floor(h % 24)} ${c.h}`
+  return `${Math.floor(h)} ${c.h} ${String(Math.floor((h * 60) % 60)).padStart(2, '0')} ${c.m}`
 }
 /** row label: Moon = the mission (APOLLO 11); Mars = its main object, which is the name kids know
  *  ("Mars Science Laboratory" → CURIOSITY, "Mars 2020" → PERSEVERANCE, "Viking 1 Lander" → VIKING 1) */
 const labelOf = (rep: Hardware, body: PlanetId) =>
-  (body === 'mars' ? rep.name.replace(/\s*\(.*\)$/, '').replace(/ Lander$/, '') : rep.mission).toUpperCase()
+  up(body === 'mars' ? rep.name.replace(/\s*\(.*\)$/, '').replace(/ Lander$/, '') : loc(rep).mission)
 
 export default function SiteClock({ body, list, selectedId, onSelect }: Props) {
+  const c = useT().clock
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000)
@@ -66,19 +66,19 @@ export default function SiteClock({ body, list, selectedId, onSelect }: Props) {
   return (
     <div className="panel clock">
       <div className="panel__head">
-        <div className="panel__title">Day &amp; night now <span className="panel__tag">[LIVE]</span></div>
+        <div className="panel__title">{c.title} <span className="panel__tag">[{useT().story.live}]</span></div>
         <span className="clock__sum"><b>☀ {lit}</b> · <span>☾ {rows.length - lit}</span></span>
       </div>
-      <p className="clock__lead">{LEAD[body]}</p>
+      <p className="clock__lead">{c.lead[body]}</p>
       <ul className="clock__rows">
         {rows.map(({ rep, ids, sun, strip }) => (
           <li key={rep.mission}>
             <button className={`clock__row${selectedId && ids.has(selectedId) ? ' is-on' : ''}`} onClick={() => onSelect(rep.id)}
-              aria-label={`${labelOf(rep, body)}: ${sun.isDay ? 'daytime' : 'night'}, ${sun.isDay ? 'sunset' : 'sunrise'} in ${fmtWait(sun.daysUntilChange)}`}>
+              aria-label={c.aria(labelOf(rep, body), sun.isDay, fmtWait(sun.daysUntilChange, c))}>
               <span className="clock__name">{labelOf(rep, body)}</span>
               <span className={`clock__icon${sun.isDay ? ' is-day' : ''}`} aria-hidden>{sun.isDay ? '☀' : '☾'}</span>
               <span className="clock__strip" aria-hidden>{strip.map((c, i) => <i key={i} className={c.cls}>{c.ch}</i>)}</span>
-              <span className="clock__next">{sun.isDay ? 'SUNSET' : 'SUNRISE'} {fmtWait(sun.daysUntilChange)}</span>
+              <span className="clock__next">{sun.isDay ? c.sunset : c.sunrise} {fmtWait(sun.daysUntilChange, c)}</span>
             </button>
           </li>
         ))}

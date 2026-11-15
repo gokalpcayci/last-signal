@@ -36,7 +36,7 @@ have small rounded fillets like real ink. → `scripts/build_brand.py`
 
 Every hardware marker is the **flat mark**, tinted by status (green still working, orange silent,
 Regolith white when selected), scaled up on hover. No box or tile behind it. Static: no idle animation.
-Laser beams only appear on the selected mirror. → `.marker__ink` in `src/index.css`
+No laser beams (removed) and no browser focus ring. → `.marker__ink` in `src/index.css`
 
 ### On the map: terrain
 

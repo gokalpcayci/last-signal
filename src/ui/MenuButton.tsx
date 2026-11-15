@@ -1,6 +1,7 @@
 /** Nav filter toggle drawn on the logo's own LED engine (same pitch, ghosts, flicker, glitches, signal blink):
  *  an LED picture of the current filter that flickers into a × when the drawer opens. */
 import { useEffect, useRef } from 'react'
+import { useT } from '../strings'
 import { LedEngine } from '../brand/ledEngine'
 import type { LedGrid } from '../brand/ledCells'
 import './menuButton.css'
@@ -17,12 +18,13 @@ export type MenuButtonProps = {
 }
 
 export default function MenuButton(p: MenuButtonProps) {
+  const t = useT()
   const engine = useRef<LedEngine | null>(null)
   return (
     <button
       className={`nav__toggle menu-btn${p.open ? ' is-open' : ''}`}
       aria-expanded={p.open} aria-controls={p.controls}
-      aria-label={`Filter hardware (now: ${p.label})`} title={p.label}
+      aria-label={t.nav.filterNow(p.label)} title={p.label}
       onClick={p.onToggle}
       // same hover as the logo: a small row tear + a random sparkle
       onMouseEnter={() => { engine.current?.glitch(undefined, 'tear'); engine.current?.flash('random') }}

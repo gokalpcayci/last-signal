@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { sunAtSite } from '../scene/sun'
 import type { PlanetId } from '../scene/planets'
+import { useT } from '../strings'
 
-const fmtDays = (d: number) => (d < 1 ? `${Math.max(1, Math.round(d * 24))} h` : `${d.toFixed(1)} days`)
 
 /** Live day/night readout for the story panel: three rows + one plain note. */
 export default function SunNow({ lat, lon, body = 'moon' }: { lat: number; lon: number; body?: PlanetId }) {
+  const t = useT().sun
+  const fmtDays = (d: number) => (d < 1 ? t.hours(Math.max(1, Math.round(d * 24))) : t.days(d))
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000)
@@ -16,17 +18,15 @@ export default function SunNow({ lat, lon, body = 'moon' }: { lat: number; lon: 
   const temp = s.isDay ? s.tempC : mars ? -80 : -170
 
   const note = s.isDay
-    ? `The Sun sits ${Math.round(s.elevation)}° above the horizon here.`
-    : mars
-      ? 'A day on Mars, called a sol, is about 40 minutes longer than ours.'
-      : 'Not fully dark: sunlight bouncing off Earth (Earthshine) lights the ground a faint blue.'
+    ? t.high(Math.round(s.elevation))
+    : mars ? t.marsNight : t.moonNight
 
   return (
     <div className={`sunnow sunnow--${s.isDay ? 'day' : 'night'}`}>
       <dl>
-        <dt>Local time</dt><dd className="sunnow__state">{s.isDay ? '☀ DAY' : '☾ NIGHT'}</dd>
-        <dt>Ground</dt><dd>≈ {temp} °C</dd>
-        <dt>{s.isDay ? 'Sunset' : 'Sunrise'}</dt><dd>in {fmtDays(s.daysUntilChange)}</dd>
+        <dt>{t.localTime}</dt><dd className="sunnow__state">{s.isDay ? t.day : t.night}</dd>
+        <dt>{t.ground}</dt><dd>≈ {temp} °C</dd>
+        <dt>{s.isDay ? t.sunset : t.sunrise}</dt><dd>{t.in(fmtDays(s.daysUntilChange))}</dd>
       </dl>
       <p className="sunnow__note">{note}</p>
     </div>

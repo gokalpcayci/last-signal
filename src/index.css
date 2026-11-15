@@ -105,7 +105,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   -webkit-mask: url(/brand/mark-flat.svg) center / contain no-repeat; mask: url(/brand/mark-flat.svg) center / contain no-repeat;
   filter: drop-shadow(0 1px 0 rgba(0,0,0,.6)); transition: transform .15s;
   transform: scale(var(--mk-s, 1)); transform-origin: 50% 100%; }
-.marker:hover .marker__ink, .marker.is-selected .marker__ink { transform: scale(calc(var(--mk-s, 1) * 1.25)); }
+.marker:hover .marker__ink, .marker.is-selected .marker__ink, .marker:focus-visible .marker__ink { transform: scale(calc(var(--mk-s, 1) * 1.25)); }
+/* no browser focus ring on the glyph: keyboard focus shows as the hover state (bigger glyph + label) */
+.marker:focus, .marker:focus-visible { outline: none; }
 
 /* ── pixel stem (DOM; height = projected ground → glyph, set as --stem by the projector) ──
    A dashed 1 px column of 2 px "pixels", echoing the LED logo. */

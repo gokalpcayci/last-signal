@@ -7,8 +7,12 @@ import { STACKED_QUERY } from '../layout'
 import { isBooted, markProgress, markSceneReady, useBooted } from '../boot'
 import './deepSpace.css'
 import { CONSTELLATIONS, DESTINATIONS, eclipticOf } from '../data/stars'
+import { DEEP_SKY, milkyWay } from '../data/deepSky'
 import { bigText, cellOf, gridFor, led, ledLine, microSprite, microText, plate, sprite, textWidth, type Ctx, type Grid } from './ledLayer'
 import { livePings, PULSE_S } from './pings'
+import { T, stringsFor } from '../strings'
+import { up, useLang } from '../i18n'
+import { deepSkySub, destination, loc, placeName } from '../data/localize'
 
 /**
  * Deep Space: a top-down solar system map in the terrain's line language. Sun in the middle,
@@ -102,7 +106,7 @@ const AST_AU: [number, number] = [2.2, 3.3]
 const KUI_AU: [number, number] = [30, 50]
 // Voyager 1 crossed the heliopause at ~121.6 AU (2012), Voyager 2 at ~119 AU (2018)
 const HELIO_AU = 120
-const PLANE_AU = 150
+const PLANE_AU = 190      // past Voyager 1 (172 AU), so interstellar space shows around it
 const LED_PX = 6          // CSS px per LED (desktop)
 /** Phones get finer LEDs: more map per inch, smaller sprites */
 const ledPxFor = (stacked: boolean) => (stacked ? 4 : LED_PX)
@@ -116,8 +120,8 @@ function planeMaterial() {
       uOrb: { value: new Array(8).fill(0) },
       uPlanet: { value: Array.from({ length: 8 }, () => new THREE.Vector2()) },
       uAst: { value: new THREE.Vector2() }, uKui: { value: new THREE.Vector2() },
-      uHelio: { value: 0 }, uAU: { value: new THREE.Vector3() },
-      cLine: { value: srgb(C.grid) }, cGhost: { value: srgb(C.ghost) }, cSun: { value: srgb(C.sun) },
+      uHelio: { value: 0 }, uAU: { value: new THREE.Vector3() }, uDisc: { value: 1 },
+      cLine: { value: srgb(C.grid) }, cGhost: { value: srgb(C.ghost) }, cSun: { value: srgb(C.sun) }, cOut: { value: srgb('#4a6274') },
       cPlanet: { value: srgb(C.near) }, cAst: { value: srgb(C.belt) }, cKui: { value: srgb(C.kuiper) },
     },
     vertexShader: /* glsl */ `
@@ -129,12 +133,12 @@ function planeMaterial() {
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform float uReveal, uTime, uPx, uHelio, uCell, uDim;
+      uniform float uReveal, uTime, uPx, uHelio, uCell, uDim, uDisc;
       uniform float uOrb[8];
       uniform vec2 uPlanet[8];
       uniform vec2 uAst, uKui;
       uniform vec3 uAU;
-      uniform vec3 cLine, cGhost, cSun, cPlanet, cAst, cKui;
+      uniform vec3 cLine, cGhost, cSun, cPlanet, cAst, cKui, cOut;
       varying vec2 vXZ;
 
       float band(float r, vec2 b, float w) { return smoothstep(b.x - w, b.x + w, r) * (1.0 - smoothstep(b.y - w, b.y + w, r)); }
@@ -167,7 +171,7 @@ function planeMaterial() {
           if (abs(r - uOrb[i]) < hc) {
             float behind = mod(lonOf(uPlanet[i]) - lon, TAU);         // 0 at the planet, growing backwards
             float tail = exp(-behind * 1.6);
-            on = max(on, 0.16 + 0.5 * tail);
+            on = max(on, 0.08 + 0.62 * tail);   // faint ring, bright tail: planets read as moving
           }
         }
         // AU rings (1, 10, 100) and the heliopause: dotted
@@ -191,11 +195,15 @@ function planeMaterial() {
         // rounded-square LED, ghosts where nothing is lit
         vec2 q = abs(f) - 0.2;
         float shape = 1.0 - smoothstep(0.06, 0.12, length(max(q, 0.0)));
-        float ghost = 0.05 * (1.0 - smoothstep(uHelio * 1.05, uHelio * 1.25, r));
+        float ghost = 0.05;
         float rim = 1.0 - smoothstep(uHelio * 1.0, uHelio * 1.16, r);
         float a = shape * max(ghost, on * max(rim, sun) * max(uDim, sun));
         if (a < 0.004) discard;
-        gl_FragColor = vec4(on > 0.0 ? col : cGhost, a);
+        // outside the heliopause the unlit LEDs turn cool: interstellar space
+        float outside = smoothstep(uHelio * 0.99, uHelio * 1.03, r);
+        vec3 ghostCol = mix(cGhost, cOut, outside);
+        if (on <= 0.0) a = shape * ghost * (1.0 + 0.6 * outside) * (1.0 - smoothstep(uDisc * 0.9, uDisc, r));
+        gl_FragColor = vec4(on > 0.0 ? col : ghostCol, a);
       }
     `,
   })
@@ -231,6 +239,7 @@ function Plane({ paths, shared, until, focus }: { paths: Paths; shared: Shared; 
     u.uAst.value.set(radius(AST_AU[0], lin), radius(AST_AU[1], lin))
     u.uKui.value.set(radius(KUI_AU[0], lin), radius(KUI_AU[1], lin))
     u.uHelio.value = radius(HELIO_AU, lin)
+    u.uDisc.value = radius(PLANE_AU, lin)
     u.uAU.value.set(radius(1, lin), radius(10, lin), radius(100, lin))
   })
   return <primitive object={mesh} />
@@ -288,6 +297,8 @@ const MAX_CLUSTERS = 6
 const SEC_PER_AU = 499.004784
 /** Stars sit on a ring this far out in scene units, past the map's edge (directions are real; the distance is just "the sky") */
 const SKY_R = 67
+/** The far backdrop (Milky Way, nearby stars, galaxies): a much bigger sphere, only seen around the disc */
+const DEEP_R = 420
 const COL = {
   ok: '#5fd068', warn: '#e56b47', text: '#e6e6df', dim: '#9a9b93', faint: '#6e706a', ghost: '#3d3f3a',
   sun: '#f2e3b3', planet: '#a39876', star: '#cfd3c4',
@@ -341,9 +352,11 @@ interface LayerProps {
   els: React.RefObject<Map<string, HTMLElement>>; positions: React.RefObject<Map<string, THREE.Vector3>>
   clusterEls: React.RefObject<(HTMLElement | null)[]>; clusters: React.RefObject<ClusterInfo[]>
   hovered: React.RefObject<string | null>; labels: Label[]
+  /** index of the cluster button under the pointer, or -1 */
+  hoverCluster: React.RefObject<number>
 }
 
-function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positions, clusterEls, clusters, hovered, labels }: LayerProps) {
+function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positions, clusterEls, clusters, hovered, labels, hoverCluster }: LayerProps) {
   const { camera, size, gl } = useThree()
   const v = useMemo(() => new THREE.Vector3(), [])
   const buf = useMemo(() => new THREE.Vector2(), [])
@@ -357,6 +370,20 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
     const st = sky.flatMap((c) => c.stars).find((x) => x.name === d.star)!
     return { ...d, p: st.p }
   }), [sky])
+  // beyond the solar system: Milky Way dust + signposts, on a far sphere
+  const deep = useMemo(() => ({
+    dust: milkyWay().map((m) => { const e = eclipticOf(m.ra, m.dec); return { p: skyDir(e.lon, e.lat, DEEP_R), w: m.w } }),
+    objs: DEEP_SKY.map((o) => { const e = eclipticOf(o.ra, o.dec); return { ...o, p: skyDir(e.lon, e.lat, DEEP_R) } }),
+    // faint field stars everywhere (decorative, seeded so they never move between visits)
+    field: (() => {
+      let sd = 7
+      const rnd = () => ((sd = (sd * 16807) % 2147483647) - 1) / 2147483646
+      return Array.from({ length: 420 }, () => {
+        const z = rnd() * 2 - 1, a = rnd() * Math.PI * 2, r = Math.sqrt(1 - z * z)
+        return { p: new THREE.Vector3(r * Math.cos(a) * DEEP_R, z * DEEP_R, r * Math.sin(a) * DEEP_R), w: rnd() ** 3, ph: rnd() * 6.28 }
+      })
+    })(),
+  }), [])
   // replay state for the selected craft: when it was picked, and its flybys
   const selAt = useRef<{ id: string | null; t: number }>({ id: null, t: 0 })
   const events = useMemo(() => {
@@ -386,6 +413,24 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
     const dim = focus ? 0.3 : 1
     camera.updateMatrixWorld()
 
+    // ── names by viewing angle: each kind of label only shows from the angle where it reads ──
+    // tilt = how steeply we look down at the planets' plane (90° straight down, 0° edge-on)
+    const fwd = camera.getWorldDirection(new THREE.Vector3())
+    const tilt = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(-fwd.y, -1, 1)))
+    const ss = THREE.MathUtils.smoothstep
+    /** chart view (looking down): map labels — rings, belts, regions */
+    const chartK = ss(tilt, 30, 44)
+    /** planets read a bit lower too */
+    const planetK = ss(tilt, 16, 28)
+    /** horizon view (looking out): sky labels — constellations, deep-sky signposts */
+    const skyK = 1 - ss(tilt, 40, 56)
+    const fwdH = new THREE.Vector2(fwd.x, fwd.z).normalize()
+    /** 1 when a sky point is straight ahead of the camera (horizontally), 0 past ~55° to the side */
+    const facing = (p: THREE.Vector3) => {
+      const d = new THREE.Vector2(p.x - camera.position.x, p.z - camera.position.z).normalize()
+      return ss(d.dot(fwdH), Math.cos(THREE.MathUtils.degToRad(55)), Math.cos(THREE.MathUtils.degToRad(30)))
+    }
+
     /** squeezed scene point → css px, or null off screen / not revealed yet */
     const project = (p: THREE.Vector3, needReveal = true, offscreen = false) => {
       if (needReveal && Math.hypot(p.x, p.z) > reveal) return null
@@ -404,16 +449,29 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
     type Box = [number, number, number, number]
     const boxes: Box[] = []
     const free = (b: Box) => !boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])
-    interface Want { prio: number; w: number; h: number; cands: [number, number][]; draw: (x: number, y: number) => void }
+    interface Want { prio: number; w: number; h: number; cands: [number, number][]; draw: (x: number, y: number) => void; anchor?: [number, number]; color?: string }
     const queue: Want[] = []
-    const want = (prio: number, w: number, h: number, cands: [number, number][], draw: (x: number, y: number) => void) => queue.push({ prio, w, h, cands, draw })
+    const want = (prio: number, w: number, h: number, cands: [number, number][], draw: (x: number, y: number) => void, anchor?: [number, number], color?: string) =>
+      queue.push({ prio, w, h, cands, draw, anchor, color })
+    /** candidate spots around an anchor: close ones first, then farther out (those get a leader line) */
+    const around = (ax: number, ay: number, w: number, h: number, gap: number): [number, number][] => [
+      [ax + gap, ay - h / 2], [ax - gap - w, ay - h / 2], [ax - w / 2, ay + gap - 2], [ax - w / 2, ay - gap - h + 2],
+      [ax + gap, ay + 6], [ax - gap - w, ay + 6], [ax + gap, ay - h - 6], [ax - gap - w, ay - h - 6],
+      [ax + gap + 24, ay + 22], [ax - gap - w - 24, ay + 22], [ax + gap + 24, ay - h - 22], [ax - gap - w - 24, ay - h - 22],
+    ]
     /** one-line plate label; anchor = the point it names */
     const tag = (prio: number, txt: string, ax: number, ay: number, color: string, alpha = 1, gap = 9) => {
       const w = textWidth(txt) + 6
-      want(prio, w, 14, [
-        [ax + gap, ay - 7], [ax - gap - w, ay - 7], [ax - w / 2, ay + gap - 2], [ax - w / 2, ay - gap - 12],
-        [ax + gap, ay + 6], [ax - gap - w, ay + 6], [ax + gap, ay - 20], [ax - gap - w, ay - 20],
-      ], (x, y) => { plate(ctx, x, y, w, 14, 0.82); microText(ctx, txt, x + 3, y + 3, color, alpha) })
+      want(prio, w, 14, around(ax, ay, w, 14, gap), (x, y) => { plate(ctx, x, y, w, 14, 0.82); microText(ctx, txt, x + 3, y + 3, color, alpha) }, [ax, ay], color)
+    }
+    /** two-line plate label (title + dimmer subline) */
+    const tag2 = (prio: number, a: string, b: string, ax: number, ay: number, color: string, alpha = 1, gap = 9) => {
+      const w = Math.max(textWidth(a), textWidth(b)) + 6
+      want(prio, w, 26, around(ax, ay, w, 26, gap), (x, y) => {
+        plate(ctx, x, y, w, 26, 0.84)
+        microText(ctx, a, x + 3, y + 3, color, alpha)
+        microText(ctx, b, x + 3, y + 15, COL.faint, Math.min(1, alpha + 0.05))
+      }, [ax, ay], color)
     }
 
     // screen furniture is off limits for labels
@@ -421,8 +479,8 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
     const LEGEND_H = 104
     const legendTop = H - bottomRow - 16 - LEGEND_H
     if (!stacked) {
-      boxes.push([16, legendTop - 4, 250, H - bottomRow])                      // legend
-      boxes.push([0, legendTop - 96, 150, legendTop - 12])                      // compass
+      boxes.push([16, legendTop + LEGEND_H - 64, 270, H - bottomRow])           // legend (compact, two columns)
+      boxes.push([0, legendTop - 26, 150, legendTop + 44])                      // compass
       boxes.push([0, H - bottomRow, W, H])                                      // bottom row of panels
       const panel = Math.min(340, Math.max(250, W * 0.2))
       boxes.push([W - panel - 30, H * 0.3, W, H])                               // right column
@@ -433,54 +491,116 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
       boxes.push([W / 2 - 140, H - 64, W / 2 + 140, H])                         // toolbar overlay
     }
 
-    // 1. the sky: constellations on the rim, faint; stars twinkle
+    // 0. beyond the solar system: Milky Way dust + signposts on a far sphere, never drawn over the disc
     const skyOn = reveal > R_OUT * 0.9
+    const cam = camera.position
+    const discR = radius(PLANE_AU, lin) * 1.04
+    /** the disc hides this far point (the line of sight crosses the planets' plane inside the disc) */
+    const behindDisc = (p: THREE.Vector3) => {
+      if ((cam.y > 0) === (p.y > 0)) return false
+      const k = cam.y / (cam.y - p.y)
+      return Math.hypot(cam.x + (p.x - cam.x) * k, cam.z + (p.z - cam.z) * k) < discR
+    }
+    const atDeep = (p: THREE.Vector3) => {
+      const q = p.clone(); q.y *= heightK(lin)
+      return behindDisc(q) ? null : project(q, false)
+    }
+    if (skyOn) {
+      const d0 = Math.max(1, pr * 1.4)
+      g.fillStyle = '#aab3c4'
+      for (const m of deep.dust) {
+        const q = atDeep(m.p)
+        if (!q) continue
+        g.globalAlpha = 0.12 + 0.36 * m.w
+        g.fillRect(Math.round(q.x * pr), Math.round(q.y * pr), d0, d0)
+      }
+      g.fillStyle = '#d9dccf'
+      for (const f of deep.field) {
+        const q = atDeep(f.p)
+        if (!q) continue
+        g.globalAlpha = (0.12 + 0.5 * f.w) * (0.75 + 0.25 * Math.sin(t * 0.9 + f.ph))
+        g.fillRect(Math.round(q.x * pr), Math.round(q.y * pr), d0, d0)
+      }
+      g.globalAlpha = 1
+      for (const o of deep.objs) {
+        const q = atDeep(o.p)
+        if (!q) continue
+        // small-LED glyphs: a star = plus, a galaxy = tilted smudge, the centre = a dense diamond
+        const dots: [number, number, number][] = o.kind === 'star' ? [[0, 0, 1], [1, 0, 0.5], [-1, 0, 0.5], [0, 1, 0.5], [0, -1, 0.5]]
+          : o.kind === 'galaxy' ? [[0, 0, 0.9], [1, 0, 0.7], [-1, 0, 0.7], [2, -1, 0.4], [-2, 1, 0.4], [1, -1, 0.5], [-1, 1, 0.5]]
+          : [[0, 0, 1], [1, 0, 0.7], [-1, 0, 0.7], [0, 1, 0.7], [0, -1, 0.7], [1, 1, 0.4], [-1, -1, 0.4], [1, -1, 0.4], [-1, 1, 0.4]]
+        for (const [dx, dy, a] of dots) { g.globalAlpha = a * 0.8; g.fillStyle = '#d9dccf'; g.fillRect(Math.round((q.x + dx * 2.5) * pr), Math.round((q.y + dy * 2.5) * pr), d0 * 1.6, d0 * 1.6) }
+        g.globalAlpha = 1
+        const k = skyK * facing(o.p)
+        if (k > 0.15) tag2(1.5, up(placeName(o.name)), deepSkySub(o.name, o.sub), q.x, q.y, COL.star, 0.75 * k, 8)
+      }
+    }
+
+    // 1. the sky: constellations on the rim, faint; stars twinkle
     if (skyOn) for (const c of sky) {
       const pts = c.stars.map((st) => atSky(st.p))
       for (const [a, b] of c.lines) {
         const pa = pts[a], pb = pts[b]
-        if (pa && pb) ledLine(ctx, grid, pr, pa.x, pa.y, pb.x, pb.y, COL.star, () => 0.1 * dim, 2)
+        if (pa && pb) ledLine(ctx, grid, pr, pa.x, pa.y, pb.x, pb.y, COL.star, () => 0.08 * dim, 2)
       }
       c.stars.forEach((st, k) => {
         const q = pts[k]
         if (!q) return
         const tw = 0.75 + 0.25 * Math.sin(t * 1.3 + k * 2.1)
-        ledAt(q.x, q.y, COL.star, (st.bright ? 0.7 : 0.38) * tw * (focus ? 0.5 : 1))
+        ledAt(q.x, q.y, COL.star, (st.bright ? 0.55 : 0.3) * tw * (focus ? 0.5 : 1))
       })
       const first = pts.find(Boolean)
-      if (first && !stacked && !focus) tag(1, c.name.toUpperCase(), first.x, first.y, COL.faint, 0.65)
+      const k = skyK * facing(c.stars[0].p)
+      if (first && !focus && k > 0.15) tag(1, up(placeName(c.name)), first.x, first.y, COL.faint, 0.75 * k)
     }
 
     // 2. probes: positions, trails, drop columns
     const shown: { id: string; h: Hardware; x: number; y: number; prio: number }[] = []
     const flybyPlanets = new Set<string>()
+    const auNow = new Map<string, number>()
+    const hov = hovered.current
     for (const h of items) {
       const o = paths.objects[h.id], el = els.current.get(h.id)
       if (!o) continue
       const p = positions.current.get(h.id) ?? new THREE.Vector3()
       const n = probeAt(o, paths.step, until, p)
+      auNow.set(h.id, p.length())
       squeeze(p, lin)
       positions.current.set(h.id, p)
       const sel = h.id === selectedId
       const color = sel ? COL.text : h.status === 'active' ? COL.ok : COL.warn
       // trail: inner looping craft only when selected; newest stretch brightest (phosphor afterglow).
       // The selected craft replays its road launch → today, then a light packet keeps running along it.
-      if (sel || o.au >= 5) {
+      if (sel || o.au >= 5 || h.id === hov) {
         const since = t - selAt.current.t
         const replay = sel ? THREE.MathUtils.smootherstep(Math.min(1, since / TRACE_S), 0, 1) : 1
         const kEnd = Math.max(1, Math.floor(replay * (n - 1)))
         const packet = sel && since > TRACE_S ? ((since - TRACE_S) % TRACE_LOOP_S) / (TRACE_LOOP_S * 0.6) : -1
+        // silent craft: the stretch after the last signal is drawn grey (drifting, no longer heard)
+        const kQuiet = h.status === 'silent' && /^\d{4}-/.test(h.lastSignal)
+          ? Math.round(((yearOf(h.lastSignal) - yearOf(o.t0)) * 365.25) / paths.step) : Infinity
         let prev: { x: number; y: number } | null = null
         const step = sel ? 1 : Math.max(1, Math.floor(n / 220))
         for (let k = 0; k <= kEnd; k += step) {
           const q = at(axes(o.pts[k], v.clone()))
           if (q && prev) {
             const f = k / n
-            let a = sel ? 0.55 : (0.12 + 0.45 * THREE.MathUtils.smoothstep(f, 0.7, 1)) * (focus ? 0.35 : 1)
+            // hover lights this trail and steps the others back a little
+            const hoverK = !focus && hov ? (h.id === hov ? 2.2 : 0.6) : 1
+            let a = sel ? 0.55 : Math.min(0.9, (0.12 + 0.45 * THREE.MathUtils.smoothstep(f, 0.7, 1)) * (focus ? 0.35 : 1) * hoverK)
             if (packet >= 0 && packet <= 1) a = Math.max(a, 1 - Math.abs(f - packet) * 14)
-            ledLine(ctx, grid, pr, prev.x, prev.y, q.x, q.y, color, () => a)
+            const quiet = k > kQuiet
+            ledLine(ctx, grid, pr, prev.x, prev.y, q.x, q.y, quiet && !sel ? COL.faint : quiet ? COL.dim : color, () => (quiet ? a * 0.75 : a))
           }
           prev = q
+        }
+        // × where it went quiet (labelled when it's the craft you're looking at)
+        if (kQuiet < n && kQuiet <= kEnd) {
+          const q = at(axes(o.pts[kQuiet], v.clone()))
+          if (q) {
+            for (const [dx, dy] of [[0, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) ledAt(q.x + dx * cell, q.y + dy * cell, COL.warn, (dx || dy ? 0.55 : 0.9) * (sel || !focus ? 1 : 0.4))
+            if (sel || h.id === hov) tag(8.5, T().deep.lastSignal(h.lastSignal.slice(0, 4)), q.x, q.y, COL.warn, 1, cell * 2 + 4)
+          }
         }
         if (sel && replay < 1) {
           // the replay head: a bright blinking block + the date it is passing (top priority label)
@@ -497,7 +617,7 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
           if (!q) continue
           flybyPlanets.add(ev.planet)
           for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) ledAt(q.x + dx * cell, q.y + dy * cell, COL.sun, 0.95)
-          tag(8, `${ev.planet.toUpperCase()} · ${Math.floor(ev.year)}`, q.x, q.y, COL.sun, 1)
+          tag(8, `${up(T().deep.planets[ev.planet] ?? ev.planet)} · ${Math.floor(ev.year)}`, q.x, q.y, COL.sun, 1)
         }
       }
       const s = project(p)
@@ -512,7 +632,8 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
     for (const id of positions.current.keys()) if (!items.some((h) => h.id === id)) positions.current.delete(id)
 
     // 3. destination headings for the Pioneers: dotted LEDs out to their star (when idle, or for the selected Pioneer)
-    for (const d of dest) {
+    for (const d0 of dest) {
+      const d = { ...d0, ...destination(d0.probe, d0) }
       const pr0 = shown.find((m) => m.id === d.probe)
       if (focus && d.probe !== selectedId) continue
       const q = atSky(d.p, true) // may be off screen: the heading line still points at it
@@ -533,7 +654,7 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
         plate(ctx, x, y, w, 27, 0.85)
         microText(ctx, d.label, x + 3, y + 3, COL.sun, 0.95)
         microText(ctx, d.sub, x + 3, y + 15, COL.dim, 0.85)
-      })
+      }, pr0 ? [pr0.x, pr0.y] : [q.x, q.y], COL.sun)
     }
 
     // 4. merge overlapping markers into clusters (2 passes); the selected craft always stays separate
@@ -573,16 +694,32 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
         if (m.h.status === 'active' && t % 1.6 < 0.55) led(ctx, grid, i, j - 4, COL.ok, sel || !focus ? 0.95 : 0.4)
         if (sel) for (const [di, dj] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) led(ctx, grid, i + di, j + dj, COL.text, 0.9)
         boxes.push([m.x - half, m.y - half - cell, m.x + half, m.y + half])
-        const name = m.h.name.toUpperCase()
-        if (sel) tag(9, stacked ? name : `${name} · ${paths.objects[m.id].au} AU`, m.x, m.y, COL.text, 1, half + 4)
-        else if (hov) tag(9, `${name} · ${paths.objects[m.id].au} AU`, m.x, m.y, COL.text, 1, half + 4)
-        else if (!focus) tag(stacked ? 3 : 5, name, m.x, m.y, m.h.status === 'active' ? COL.ok : COL.warn, 0.85, half + 4)
+        const name = up(loc(m.h).name)
+        const au = auNow.get(m.id) ?? 0
+        const dist = `${T().deep.au(au < 10 ? +au.toFixed(1) : Math.round(au))} · ${m.h.status === 'active' ? T().deep.talking : T().deep.silent}`
+        const sc = m.h.status === 'active' ? COL.ok : COL.warn
+        if (sel) { if (stacked) tag(9, name, m.x, m.y, COL.text, 1, half + 4); else tag2(9, name, dist, m.x, m.y, COL.text, 1, half + 4) }
+        else if (hovered.current === m.id) tag2(9, name, dist, m.x, m.y, COL.text, 1, half + 4)
+        else if (!focus) {
+          // far craft carry name + distance; the crowd near the Sun gets short, lower-priority name tags
+          const inner = (paths.objects[m.id]?.au ?? 0) < 5
+          if (stacked || inner) tag(inner ? 2.5 : 3, name, m.x, m.y, sc, 0.8, half + 4)
+          else tag2(5, name, dist, m.x, m.y, sc, 0.9, half + 4)
+        }
       }
       for (const m of merge) { const el = els.current.get(m.id); if (el) el.style.display = 'none' }
       if (merge.length < 2) continue
       const [x, y] = centre(merge)
       const [i, j] = cellOf(grid, pr, x, y)
       bigText(ctx, grid, i, j, String(merge.length), COL.warn, focus ? 0.45 : 0.95)
+      if (hoverCluster.current === ci) {
+        const lines = merge.map((o) => `${up(loc(o.h).name)} · ${T().deep.au(+(auNow.get(o.id) ?? 0).toFixed(1))}`)
+        const w = Math.max(...lines.map((l) => textWidth(l))) + 6, hh = lines.length * 12 + 4
+        want(9.5, w, hh, around(x, y, w, hh, cell * 3 + 6), (lx, ly) => {
+          plate(ctx, lx, ly, w, hh, 0.9)
+          lines.forEach((l, k) => microText(ctx, l, lx + 3, ly + 3 + k * 12, merge[k].h.status === 'active' ? COL.ok : COL.warn, 1))
+        }, [x, y], COL.warn)
+      }
       boxes.push([x - cell * 3, y - cell * 3, x + cell * 3, y + cell * 3])
       const cel = clusterEls.current[ci]
       if (cel && ci < MAX_CLUSTERS) {
@@ -617,7 +754,7 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
         ledAt(x0 + (x1 - x0) * uu, y0 + (y1 - y0) * uu, back ? COL.ok : COL.sun, 1 - k / 6)
       }
       const hx = x0 + (x1 - x0) * u, hy = y0 + (y1 - y0) * u
-      tag(10, `${back ? 'REPLY' : 'PING'} ×${Math.round((o.au * SEC_PER_AU) / PULSE_S).toLocaleString('en-US')} SPEED`, hx, hy, back ? COL.ok : COL.sun, 1)
+      tag(10, T().deep.ping(back, Math.round((o.au * SEC_PER_AU) / PULSE_S)), hx, hy, back ? COL.ok : COL.sun, 1)
     }
 
     // 6. map labels: planets, rings, belts — fewer on phones, and only the relevant ones in focus mode
@@ -626,18 +763,21 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
       const isPlanet = PLANET_NAMES.includes(l.key)
       if (focus && !(l.key === 'earth' || flybyPlanets.has(l.key))) continue
       if (stacked && !(l.key === 'earth' || l.key === 'sun' || GIANTS.includes(l.key))) continue
+      // rings/belts/regions only in chart view, planets down to a lower tilt; Earth always
+      const k = l.key === 'earth' ? 1 : isPlanet ? planetK : chartK
+      if (k < 0.15) continue
       const q = at(l.at(until, v))
       if (!q) continue
       if (l.key === 'earth') {
-        const w = Math.max(textWidth('EARTH'), textWidth('▲ YOU ARE HERE')) + 6
+        const w = Math.max(textWidth(T().deep.earth), textWidth(T().deep.here)) + 6
         want(6, w, 27, [[q.x + 8, q.y - 6], [q.x - 8 - w, q.y - 6], [q.x - w / 2, q.y + 8], [q.x - w / 2, q.y - 34]], (x, y) => {
           plate(ctx, x, y, w, 27, 0.85)
-          microText(ctx, 'EARTH', x + 3, y + 3, COL.sun, 1)
-          microText(ctx, t % 1 < 0.55 ? '▲ YOU ARE HERE' : '  YOU ARE HERE', x + 3, y + 15, COL.sun, 0.8)
-        })
+          microText(ctx, T().deep.earth, x + 3, y + 3, COL.sun, 1)
+          microText(ctx, t % 1 < 0.55 ? T().deep.here : T().deep.hereBlink, x + 3, y + 15, COL.sun, 0.8)
+        }, [q.x, q.y], COL.sun)
         continue
       }
-      tag(isPlanet ? (GIANTS.includes(l.key) ? 4 : 3) : 2, l.text.toUpperCase(), q.x, q.y, l.color ?? COL.dim, l.alpha ?? 0.8, 6)
+      tag(isPlanet ? (GIANTS.includes(l.key) ? 4 : 3) : 2, up(l.text), q.x, q.y, l.color ?? COL.dim, (l.alpha ?? 0.8) * k, 6)
     }
 
     // place every label, most important first
@@ -647,13 +787,32 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
         const x = Math.min(Math.max(6, x0), W - q.w - 6)
         if (y < 6 || y + q.h > H - 6) continue
         const b: Box = [x - 2, y - 2, x + q.w + 2, y + q.h + 2]
-        if (free(b)) { boxes.push(b); q.draw(x, y); break }
+        if (!free(b)) continue
+        boxes.push(b)
+        if (q.anchor) {
+          // a label pushed away from what it names gets a dotted leader back to it
+          const [ax, ay] = q.anchor
+          const nx = Math.min(Math.max(ax, x), x + q.w), ny = Math.min(Math.max(ay, y), y + q.h)
+          const len = Math.hypot(nx - ax, ny - ay)
+          if (len > 16) {
+            g.fillStyle = q.color ?? COL.dim
+            g.globalAlpha = 0.55
+            const steps = Math.floor(len / 3)
+            for (let k = 2; k < steps; k++) {
+              const u = k / steps
+              g.fillRect(Math.round((ax + (nx - ax) * u) * pr), Math.round((ay + (ny - ay) * u) * pr), Math.max(1, pr), Math.max(1, pr))
+            }
+            g.globalAlpha = 1
+          }
+        }
+        q.draw(x, y)
+        break
       }
     }
 
     // 7. HUD (desktop): compass + legend, bottom-left of the visible map
     if (!stacked) {
-      const cx = 40, cy = legendTop - 54
+      const cx = 40, cy = legendTop + 14
       const o0 = project(new THREE.Vector3(0, 0, 0), false), ox = project(new THREE.Vector3(10, 0, 0), false), oy = project(new THREE.Vector3(0, 10, 0), false)
       if (o0 && ox && oy) {
         const arm = (q: { x: number; y: number }, lab: string) => {
@@ -662,23 +821,30 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
           ledLine(ctx, grid, pr, cx, cy, ex, ey, COL.dim, (u) => 0.25 + 0.55 * u)
           microText(ctx, lab, ex + (dx / l) * 6 - 4, ey + (dy / l) * 6 - 4, COL.dim, 0.9)
         }
-        arm(ox, '♈ EQUINOX')
-        arm(oy, '↑ N')
+        arm(ox, T().deep.equinox)
+        arm(oy, T().deep.north)
         ledAt(cx, cy, COL.sun, 0.9)
       }
-      // legend: what each mark means
-      const lx = 24
-      let ly = legendTop
-      microText(ctx, 'KEY', lx, ly, COL.faint, 0.9)
-      ly += 14
-      const row = (draw: () => void, txt: string, color = COL.dim) => { draw(); microText(ctx, txt, lx + 18, ly + 1, color, 0.9); ly += 13 }
-      row(() => microSprite(ctx, 'probe', lx, ly - 2, COL.ok), 'STILL TALKING', COL.ok)
-      row(() => microSprite(ctx, 'probe', lx, ly - 2, COL.warn), 'SILENT', COL.warn)
-      row(() => microSprite(ctx, 'telescope', lx, ly - 2, COL.dim), 'TELESCOPE  ·  LANDER ON A ROCK')
-      row(() => { g.fillStyle = COL.planet; g.fillRect((lx + 2) * pr, (ly) * pr, 6 * pr, 6 * pr) }, 'PLANET + ITS ORBIT')
-      row(() => { g.fillStyle = COL.sun; g.fillRect((lx + 3) * pr, (ly + 1) * pr, 4 * pr, 4 * pr) }, 'PLANET FLYBY')
-      row(() => { for (let k = 0; k < 3; k++) { g.fillStyle = COL.warn; g.globalAlpha = 0.6; g.fillRect((lx + k * 4) * pr, (ly + 2) * pr, 2 * pr, 2 * pr) } g.globalAlpha = 1 }, "HELIOPAUSE · EDGE OF THE SUN'S BUBBLE")
-      row(() => { for (let k = 0; k < 3; k++) { g.fillStyle = COL.star; g.globalAlpha = 0.5; g.fillRect((lx + k * 4) * pr, (ly + (k % 2) * 3) * pr, 2 * pr, 2 * pr) } g.globalAlpha = 1 }, 'STARS · REAL DIRECTIONS')
+      // legend: what each mark means — small font, two columns, short words
+      const P = 1.5, lh = 10, colW = 118
+      const lx = 22
+      const rows: [() => void, string, string][] = [
+        [() => microSprite(ctx, 'probe', lx, 0, COL.ok, 1.2), T().deep.legend[0], COL.ok],
+        [() => microSprite(ctx, 'probe', lx, 0, COL.warn, 1.2), T().deep.legend[1], COL.warn],
+        [() => microSprite(ctx, 'telescope', lx, 0, COL.dim, 1.2), T().deep.legend[2], COL.dim],
+        [() => { for (const [dx, dy] of [[0, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { g.fillStyle = COL.warn; g.fillRect((lx + 3 + dx * 2) * pr, (3 + dy * 2) * pr, 1.5 * pr, 1.5 * pr) } }, T().deep.legend[3], COL.warn],
+        [() => { g.fillStyle = COL.planet; g.fillRect((lx + 1) * pr, 1 * pr, 5 * pr, 5 * pr) }, T().deep.legend[4], COL.dim],
+        [() => { g.fillStyle = COL.sun; g.fillRect((lx + 2) * pr, 2 * pr, 3 * pr, 3 * pr) }, T().deep.legend[5], COL.dim],
+        [() => { for (let k = 0; k < 3; k++) { g.fillStyle = COL.warn; g.globalAlpha = 0.6; g.fillRect((lx + k * 3) * pr, 3 * pr, 1.5 * pr, 1.5 * pr) } g.globalAlpha = 1 }, T().deep.legend[6], COL.dim],
+        [() => { g.fillStyle = '#4a6274'; for (let k = 0; k < 3; k++) g.fillRect((lx + k * 3) * pr, (1 + (k % 2) * 3) * pr, 1.5 * pr, 1.5 * pr) }, T().deep.legend[7], COL.dim],
+      ]
+      const top = legendTop + LEGEND_H - Math.ceil(rows.length / 2) * lh - 12
+      microText(ctx, T().deep.key, lx, top, COL.faint, 0.9, P)
+      rows.forEach(([icon, txt, color], k) => {
+        const cx0 = (k % 2) * colW, cy0 = top + 11 + Math.floor(k / 2) * lh
+        g.save(); g.translate(cx0 * pr, cy0 * pr); icon(); g.restore()
+        microText(ctx, txt, lx + cx0 + 11, cy0, color, 0.9, P)
+      })
     }
   })
   return null
@@ -697,6 +863,9 @@ const HOME_PORTRAIT: View = { pos: [-6, 140, -46], target: [0, 0, -9] }
 /** Intro: start this many times farther out than home (the whole sky ring in view), then glide in */
 const INTRO_FAR = 2.6
 const INTRO_SMOOTH = 1.5
+const INTRO_MAX = 560
+/** After the intro, zooming out stops at this × the home distance (farther looks empty and tiny) */
+const ZOOM_OUT_MAX = 1.35
 
 /** A craft's whole road on the map: centre and radius of its bounding box (squeezed scene units). */
 export interface Road { center: THREE.Vector3; radius: number }
@@ -714,6 +883,8 @@ function CameraRig({ selectedId, positions, focus, ready, roadOf }: {
   const booted = useBooted()
   const introDone = useRef(false)
   const parked = useRef(false)
+  // the intro needs room to start far out; afterwards zooming out stops a little past home
+  const [maxD, setMaxD] = useState(INTRO_MAX)
   const aspect = useThree((s) => s.size.width / s.size.height)
   const get = useThree((s) => s.get)
   const { width, height } = useThree((s) => s.size)
@@ -739,11 +910,18 @@ function CameraRig({ selectedId, positions, focus, ready, roadOf }: {
     // park far out first (the canvas mounts its children late, so paths may already be ready here)
     if (!parked.current) { c.setLookAt(...far, ...v.target, false); parked.current = true }
     if (!ready || !booted) return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { c.setLookAt(...v.pos, ...v.target, false); introDone.current = true; return }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      c.setLookAt(...v.pos, ...v.target, false); introDone.current = true
+      setMaxD(new THREE.Vector3(...v.pos).distanceTo(new THREE.Vector3(...v.target)) * ZOOM_OUT_MAX)
+      return
+    }
     // hold the wide view while the LEDs switch on (BOOT_S), then glide in
     const hold = 250 + BOOT_S * 1000
     const t0 = setTimeout(() => { c.smoothTime = INTRO_SMOOTH; c.setLookAt(...v.pos, ...v.target, true) }, hold)
-    const t1 = setTimeout(() => { c.smoothTime = 0.25; introDone.current = true }, hold + INTRO_SMOOTH * 2400)
+    const t1 = setTimeout(() => {
+      c.smoothTime = 0.25; introDone.current = true
+      setMaxD(new THREE.Vector3(...v.pos).distanceTo(new THREE.Vector3(...v.target)) * ZOOM_OUT_MAX)
+    }, hold + INTRO_SMOOTH * 2400)
     return () => { clearTimeout(t0); clearTimeout(t1) }
   }, [ready, booted, portrait])
 
@@ -777,7 +955,7 @@ function CameraRig({ selectedId, positions, focus, ready, roadOf }: {
     <CameraControls
       ref={controls}
       minDistance={4}
-      maxDistance={560}
+      maxDistance={maxD}
       // space has no edges: orbit all the way round, and tip slightly below the plane to see Voyager 2
       minPolarAngle={0}
       maxPolarAngle={Math.PI * 0.62}
@@ -811,34 +989,38 @@ export default function DeepSpaceScene({ items, selectedId, onSelect, trueScale,
   const els = useRef(new Map<string, HTMLElement>())
   const ledCanvas = useRef<HTMLCanvasElement>(null)
   const hovered = useRef<string | null>(null)
+  const hoverCluster = useRef(-1)
   const positions = useRef(new Map<string, THREE.Vector3>())
   const clusterEls = useRef<(HTMLElement | null)[]>([])
   const clusters = useRef<ClusterInfo[]>([])
   const [focus, setFocus] = useState<{ at: THREE.Vector3; n: number } | null>(null)
   const booted = useBooted()
+  const lang = useLang()
 
   const labels = useMemo<Label[]>(() => {
     if (!paths) return []
+    const S = stringsFor(lang)
     const onRing = (au: number, deg: number) => (_: number | null, out: THREE.Vector3) => {
       const a = THREE.MathUtils.degToRad(deg)
       return out.set(au * Math.cos(a), 0, -au * Math.sin(a))
     }
     // priority order: earlier labels win when two would overlap
     return [
-      { key: 'earth', text: 'Earth', color: COL.sun, alpha: 0.9, at: (t, out) => planetPos(paths, 'earth', t ?? yearOf(paths.epoch), out) },
-      { key: 'sun', text: 'Sun', color: COL.sun, at: (_, out) => out.set(0, 0, 0) },
+      { key: 'earth', text: S.deep.planets.earth, color: COL.sun, alpha: 0.9, at: (t, out) => planetPos(paths, 'earth', t ?? yearOf(paths.epoch), out) },
+      { key: 'sun', text: S.deep.sun, color: COL.sun, at: (_, out) => out.set(0, 0, 0) },
       ...PLANET_NAMES.filter((n) => n !== 'earth').map((n): Label => ({
-        key: n, text: n, color: COL.planet, alpha: 0.85,
+        key: n, text: S.deep.planets[n] ?? n, color: COL.planet, alpha: 0.85,
         at: (t, out) => planetPos(paths, n, t ?? yearOf(paths.epoch), out),
       })),
-      { key: 'helio', text: 'Heliopause ~120 AU', color: COL.warn, alpha: 0.6, at: onRing(120, 140) },
-      { key: 'r100', text: '100 AU', at: onRing(100, -30), alpha: 0.5 },
-      { key: 'r10', text: '10 AU', at: onRing(10, -30), alpha: 0.5 },
-      { key: 'r1', text: '1 AU', at: onRing(1, -30), alpha: 0.5 },
-      { key: 'kuiper', text: 'Kuiper Belt', at: onRing(40, 205), alpha: 0.55 },
-      { key: 'belt', text: 'Asteroid belt', at: onRing(2.8, 250), alpha: 0.55 },
+      { key: 'helio', text: S.deep.helio, color: COL.warn, alpha: 0.6, at: onRing(120, 140) },
+      { key: 'interstellar', text: S.deep.interstellar, color: '#7f97ab', alpha: 0.75, at: onRing(150, 160) },
+      { key: 'r100', text: S.deep.au(100), at: onRing(100, -30), alpha: 0.5 },
+      { key: 'r10', text: S.deep.au(10), at: onRing(10, -30), alpha: 0.5 },
+      { key: 'r1', text: S.deep.au(1), at: onRing(1, -30), alpha: 0.5 },
+      { key: 'kuiper', text: S.deep.kuiper, at: onRing(40, 205), alpha: 0.55 },
+      { key: 'belt', text: S.deep.belt, at: onRing(2.8, 250), alpha: 0.55 },
     ]
-  }, [paths])
+  }, [paths, lang]) // texts come from T(): rebuild on a language switch
 
   // whole-road bounds per craft, in the current scale (log or 1:1)
   const roadOf = useMemo(() => {
@@ -874,7 +1056,7 @@ export default function DeepSpaceScene({ items, selectedId, onSelect, trueScale,
         <Driver shared={shared} trueScale={trueScale} />
         {paths && <Plane paths={paths} shared={shared} until={until} focus={selectedId != null} />}
         {paths && <LedLayer paths={paths} items={items} until={until} shared={shared} selectedId={selectedId} canvas={ledCanvas}
-          els={els} positions={positions} clusterEls={clusterEls} clusters={clusters} hovered={hovered} labels={labels} />}
+          els={els} positions={positions} clusterEls={clusterEls} clusters={clusters} hovered={hovered} labels={labels} hoverCluster={hoverCluster} />}
         <CameraRig selectedId={selectedId} positions={positions} focus={focus} ready={!!paths} roadOf={roadOf} />
       </Canvas>
 
@@ -890,7 +1072,7 @@ export default function DeepSpaceScene({ items, selectedId, onSelect, trueScale,
             onClick={() => onSelect(h.id)}
             onPointerEnter={() => { hovered.current = h.id }}
             onPointerLeave={() => { if (hovered.current === h.id) hovered.current = null }}
-            aria-label={`${h.mission} — ${h.name}`}
+            aria-label={`${loc(h).mission} — ${loc(h).name}`}
             style={{ display: 'none', '--ping-delay': `${BOOT_MARKERS_START_S + (order.get(h.id) ?? 0) * BOOT_MARKER_STEP_S}s` } as React.CSSProperties}
           >
             <span className="marker__ink" />
@@ -900,8 +1082,10 @@ export default function DeepSpaceScene({ items, selectedId, onSelect, trueScale,
         {Array.from({ length: MAX_CLUSTERS }, (_, i) => (
           <button key={`c${i}`} className="ds-cluster" style={{ display: 'none' }}
             ref={(el) => { clusterEls.current[i] = el }}
+            onPointerEnter={() => { hoverCluster.current = i }}
+            onPointerLeave={() => { if (hoverCluster.current === i) hoverCluster.current = -1 }}
             onClick={() => { const c = clusters.current[i]; if (c) setFocus({ at: c.at.clone(), n: Date.now() }) }}
-            aria-label="Group of craft — zoom in">
+            aria-label={T().deep.group}>
             <span />
           </button>
         ))}

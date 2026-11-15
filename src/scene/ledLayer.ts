@@ -66,6 +66,13 @@ const G: Record<string, string> = {
   '↑': '.#.###.#..#..#.',
   '%': '#.#..#.#.#..#.#',
   '?': '##...#.#.....#.',
+  // Turkish: the marks have to share the 5 rows, so the letter body shrinks by a row
+  'Ç': '####..#..###.#.',
+  'Ö': '#.#...####.####',
+  'Ü': '#.#...#.##.####',
+  'İ': '.#....###.#.###',
+  'Ş': '.##.#.##..#....',
+  'Ğ': '###....###.####',
 }
 for (const [k, v] of Object.entries(G)) if (v.length !== 15) throw new Error(`ledLayer font: bad glyph ${k}`)
 
