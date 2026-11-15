@@ -17,6 +17,7 @@ import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
 import SignalChart, { TIMELINES } from './ui/SignalChart'
 import StrandedGame from './ui/StrandedGame'
+import { StoryPhoto } from './ui/StoryPhoto'
 import TextEffect from './ui/TextEffect'
 import { usePresence } from './ui/usePresence'
 import { exaggeration, setPlanet } from './scene/terrain'
@@ -183,6 +184,7 @@ export default function App() {
               </div>
               <TextEffect className="story__mission" trigger={!leaving}>{`${story.mission.toUpperCase()} · ${kindLabel[story.kind].toUpperCase()}`}</TextEffect>
               <TextEffect as="h2" trigger={!leaving} delay={0.1}>{story.name}</TextEffect>
+              <StoryPhoto id={story.id} />
               <dl>
                 <dt>Site</dt><dd><TextEffect per="word" trigger={!leaving} delay={0.25}>{story.site}</TextEffect></dd>
                 <dt>Arrived</dt><dd><TextEffect trigger={!leaving} delay={0.3}>{fmtDate(story.arrived)}</TextEffect></dd>
