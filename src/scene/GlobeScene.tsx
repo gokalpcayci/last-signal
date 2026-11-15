@@ -59,6 +59,13 @@ function anchors(items: Hardware[], g: GlobeData) {
 function Planet({ data, mat }: { data: GlobeData; mat: THREE.ShaderMaterial }) {
   const geo = useMemo(() => data.geometry(), [data])
   useEffect(() => () => geo.dispose(), [geo])
+  useEffect(() => {
+    const u = mat.uniforms
+    u.uHeight.value = data.heightTex
+    u.uColor.value = data.colorTex
+    u.uHSize.value.copy(data.heightSize)
+    u.uAlb.value.set(...data.albedo)
+  }, [data, mat])
   return <mesh geometry={geo} material={mat} />
 }
 
@@ -227,7 +234,7 @@ function CameraRig({ planet, sel }: { planet: PlanetId; sel: Anchor | null }) {
   return (
     <CameraControls
       ref={controls}
-      minDistance={GLOBE_R * 1.55}
+      minDistance={GLOBE_R * 1.15}
       maxDistance={Math.max(fit * 1.6, GLOBE_R * 3)}
       minPolarAngle={0.12}
       maxPolarAngle={Math.PI - 0.12}

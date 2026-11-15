@@ -2,12 +2,11 @@ import { lazy, Suspense, useCallback, useState } from 'react'
 import { StoryPhoto } from './StoryPhoto'
 import { MODELS } from '../data/models'
 import { useT } from '../strings'
-import type { HardwareStatus } from '../data/hardware'
 
 const CraftViewer = lazy(() => import('./CraftViewer'))
 
 /** Story panel media: the NASA photo slideshow, plus a 3D tab when NASA publishes a model. */
-export function StoryMedia({ id, status }: { id: string; status: HardwareStatus }) {
+export function StoryMedia({ id }: { id: string }) {
   const t = useT().story
   const model = MODELS[id]
   const [tab, setTab] = useState<'photo' | 'model'>('photo')
@@ -30,7 +29,7 @@ export function StoryMedia({ id, status }: { id: string; status: HardwareStatus 
         <figure className="photo">
           <div className={`photo__frame media__model${ready ? ' is-loaded' : ''}`}>
             <Suspense fallback={null}>
-              <CraftViewer src={model.src} status={status} onReady={onReady} onError={onError} />
+              <CraftViewer src={model.src} onReady={onReady} onError={onError} />
             </Suspense>
             {!ready && <span className="photo__wait">{t.modelLoading}</span>}
           </div>

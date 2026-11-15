@@ -82,7 +82,7 @@ const en = {
     globeOff: 'See the whole world as a globe',
   },
   globe: {
-    credit: 'GLOBE VIEW · AFTER OFFWORLD ARCHIVE BY UYGAR YILDIRIM · NASA TREK LOLA / MOLA',
+    credit: 'GLOBE VIEW · AFTER OFFWORLD ARCHIVE BY UYGAR YILDIRIM · NASA LRO LOLA + WAC / MGS MOLA',
   },
   sun: {
     localTime: 'Local time', day: '☀ DAY', night: '☾ NIGHT', ground: 'Ground',
@@ -289,7 +289,7 @@ const tr: Strings = {
     globeOff: 'Bütün dünyayı küre olarak gör',
   },
   globe: {
-    credit: 'KÜRE GÖRÜNÜMÜ · UYGAR YILDIRIM’IN OFFWORLD ARCHIVE’INDAN · NASA TREK LOLA / MOLA',
+    credit: 'KÜRE GÖRÜNÜMÜ · UYGAR YILDIRIM’IN OFFWORLD ARCHIVE’INDAN · NASA LRO LOLA + WAC / MGS MOLA',
   },
   sun: {
     localTime: 'Yerel saat', day: '☀ GÜNDÜZ', night: '☾ GECE', ground: 'Zemin',
