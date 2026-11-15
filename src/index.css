@@ -74,7 +74,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .nav li button:hover { color: var(--dim); }
 .nav li button.is-on { color: var(--text); }
 .nav__soon { margin-top: 18px; color: var(--faint); font-size: 9px; }
-.planet-switch { margin-top: 14px; padding-top: 4px; border-top: 1px dashed var(--line); display: flex; gap: 4px; margin-left: -10px; }
+/* top-right of the map, clear of the right panel (which starts 30% down) */
+.planet-switch { position: absolute; z-index: 10; top: 30px; right: 30px; display: flex; gap: 6px; }
 /* LED planet discs (src/ui/PlanetIcon.tsx): the chosen world fully lit, the other dimmed */
 /* each button: the disc in the middle, its name bent along the orbit above it (OrbitLabel) */
 .planet-switch button { position: relative; display: grid; place-items: center; color: var(--dim); transition: color .15s; }
@@ -87,7 +88,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .planet-switch button:hover .planet-icon { opacity: .9; }
 .planet-switch button.is-on .planet-icon { opacity: 1; }
 .planet-switch button:focus-visible { outline: 1px dashed var(--line-strong); outline-offset: 4px; }
-.planet-switch + .nav__soon { margin-top: 8px; }
 
 /* stepped skyline under the stacked nav — only shown in the stacked layout */
 .nav__edge { display: none; }
@@ -306,10 +306,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .nav li button.is-on { border-color: var(--line-strong); background: #1a1b19; color: var(--text); }
   .nav__soon { display: none; }
   .nav { z-index: 6; }
-  .planet-switch { margin: 10px 0 4px; padding-top: 10px; }
-  .planet-switch { margin-left: -8px; }
-  .planet-switch button { color: var(--dim); }
-  .planet-switch button.is-on { color: var(--text); }
   .nav__edge { display: block; position: absolute; left: 0; right: 0; top: 100%; width: 100%; height: 18px; pointer-events: none; }
   .nav__edge-fill { fill: var(--bg); }
   .nav__edge-line { fill: none; stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }

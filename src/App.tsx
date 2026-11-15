@@ -15,6 +15,7 @@ import {
 import NavEdge from './ui/NavEdge'
 import PlanetIcon, { OrbitLabel } from './ui/PlanetIcon'
 import MenuButton from './ui/MenuButton'
+import MobileNav from './ui/MobileNav'
 import { LedLogo } from './ui/LedLogo'
 import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
@@ -103,14 +104,15 @@ export default function App() {
   const currentFilter = FILTERS.find((f) => f.id === filter)?.label ?? 'All hardware'
   // only offer filters for kinds this body actually has
   const filters = FILTERS.filter((f) => f.id === 'all' || list.some((h) => h.kind === f.id))
-  const switchPlanet = (id: WorldId) => {
+  /** keepOpen: the phone drawer stays open and moves on to that world's filters */
+  const switchPlanet = (id: WorldId, keepOpen = false) => {
     if (id === planet) return
     setPlanetId(id)
     setSelectedId(null)
     setFilter('all')
     setUntil(null)
     setLava(null)
-    setNavOpen(false)
+    if (!keepOpen) setNavOpen(false)
   }
   const rightRef = useRef<HTMLElement>(null)
 
@@ -132,6 +134,21 @@ export default function App() {
   // keep the story on screen while its text plays the exit
   const [story, leaving] = usePresence(selected)
   const active = list.filter((h) => h.status === 'active').length
+
+  // LED planet discs, top-right of the map (desktop / tablet). Phones pick the world in MobileNav.
+  const discSize = 40
+  const planetSwitch = (
+    <div className="planet-switch" role="group" aria-label="Choose a world">
+      {(Object.keys(WORLDS) as WorldId[]).map((id) => (
+        <button key={id} className={planet === id ? 'is-on' : ''} aria-pressed={planet === id} onClick={() => switchPlanet(id)}
+          title={`Explore what we left ${id === 'deep' ? 'in deep space' : `on ${WORLDS[id].name}`}`}>
+          <PlanetIcon id={id} active={planet === id} size={discSize} />
+          <OrbitLabel size={discSize} text={WORLDS[id].label.toUpperCase()} />
+          <span className="te__sr">{WORLDS[id].label}</span>
+        </button>
+      ))}
+    </div>
+  )
 
   return (
     <div className="page">
@@ -156,17 +173,32 @@ export default function App() {
             : <MoonScene key={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} />}
         </div>
 
+        {/* top-right: planet switch (desktop / tablet overlay) */}
+        {!stacked && planetSwitch}
+
         {/* top-left: logo + nav */}
         <aside className={`nav${navOpen ? ' is-open' : ''}`}>
           <div className="nav__bar">
             <LedLogo className="logo" width={stacked ? 56 : 84} />
+            {/* phones: where you are (world · filter); tap to open the two-step drawer */}
+            {stacked && (
+              <button className="nav__crumb" aria-controls="nav-filters" aria-expanded={navOpen} onClick={() => setNavOpen((o) => !o)}>
+                <b>{W.label.toUpperCase()}</b>{currentFilter.toUpperCase()}
+              </button>
+            )}
             {/* phones: one compact row; tap to expand the filter row */}
             <MenuButton open={navOpen} onToggle={() => setNavOpen((o) => !o)} controls="nav-filters"
               filter={filter} label={currentFilter}
-              pitch={((stacked ? 56 : 84) * 16) / 768 /* = the nav logo's LED pitch */} />
+              pitch={22 / 30 /* 30-LED glyph drawn 22px wide: a bit over half the logo's height (finer LEDs than the logo) */} />
           </div>
           <div className="nav__drawer" id="nav-filters">
             <div className="nav__drawer-inner">
+              {stacked ? (
+                <MobileNav open={navOpen} world={planet} filters={filters} filter={filter}
+                  counts={{ moon: HARDWARE.moon.length, mars: HARDWARE.mars.length, deep: HARDWARE.deep.length }}
+                  onWorld={(id) => switchPlanet(id, true)}
+                  onFilter={(id) => { setFilter(id as Filter); setSelectedId(null); setNavOpen(false) }} />
+              ) : (
               <ul>
                 {filters.map((f, i) => (
                   <li key={f.id} style={{ '--i': i } as React.CSSProperties}>
@@ -176,16 +208,7 @@ export default function App() {
                   </li>
                 ))}
               </ul>
-              <div className="planet-switch" role="group" aria-label="Choose a world">
-                {(Object.keys(WORLDS) as WorldId[]).map((id) => (
-                  <button key={id} className={planet === id ? 'is-on' : ''} aria-pressed={planet === id} onClick={() => switchPlanet(id)}
-                    title={`Explore what we left ${id === 'deep' ? 'in deep space' : `on ${WORLDS[id].name}`}`}>
-                    <PlanetIcon id={id} active={planet === id} size={stacked ? 34 : 40} />
-                    <OrbitLabel size={stacked ? 34 : 40} text={WORLDS[id].label.toUpperCase()} />
-                    <span className="te__sr">{WORLDS[id].label}</span>
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
           </div>
           <NavEdge />
