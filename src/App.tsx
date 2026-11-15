@@ -20,7 +20,7 @@ import SignalMap from './ui/SignalMap'
 import { LedLogo } from './ui/LedLogo'
 import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
-import SignalChart, { TIMELINES } from './ui/SignalChart'
+import SignalChart, { TIMELINES, toYear } from './ui/SignalChart'
 import SiteClock from './ui/SiteClock'
 import SignalDelay from './ui/SignalDelay'
 import DistanceLadder from './ui/DistanceLadder'
@@ -131,6 +131,9 @@ export default function App() {
     const ok = new Set(timeline.order.slice(0, landed))
     return list.filter((h) => (filter === 'all' || h.kind === filter) && ok.has(h.id))
   }, [filter, landed, list, timeline])
+  // objects that are silent today but still talking at the playhead (their last signal is later)
+  const talkingKey = until == null ? '' : list.filter((h) => h.status === 'silent' && toYear(h.lastSignal) > until).map((h) => h.id).join(',')
+  const talking = useMemo(() => new Set(talkingKey ? talkingKey.split(',') : []), [talkingKey])
   const selected = list.find((h) => h.id === selectedId) ?? null
   // keep the story on screen while its text plays the exit
   const [story, leaving] = usePresence(selected)
@@ -171,7 +174,7 @@ export default function App() {
         <div className="scene">
           {isDeep
             ? <DeepSpaceScene key="deep" items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} until={until} />
-            : <MoonScene key={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} />}
+            : <MoonScene key={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} talking={talking} />}
         </div>
 
         {/* top-right: planet switch (desktop / tablet overlay) */}
@@ -220,12 +223,17 @@ export default function App() {
           {story ? (
             <div className={`story${leaving ? ' is-leaving' : ''}`} key={story.id}>
               <div className="story__head">
-                <span className={`pill pill--${story.status}`}>{story.status === 'active' ? 'STILL WORKING' : 'SILENT'}</span>
+                <span className={`status status--${story.status}`}>
+                  <span className="status__key">SIG</span>
+                  <span className="status__trace" aria-hidden>{story.status === 'active' ? '▪=========▌' : '▪=====::..×'}</span>
+                  {story.status === 'active' ? 'LIVE' : `LOST ${story.lastSignal.slice(0, 4)}`}
+                </span>
                 <button className="close" onClick={() => setSelectedId(null)}>×</button>
               </div>
               <TextEffect className="story__mission" trigger={!leaving}>{`${story.mission.toUpperCase()} · ${kindLabel[story.kind].toUpperCase()}`}</TextEffect>
               <TextEffect as="h2" trigger={!leaving} delay={0.1}>{story.name}</TextEffect>
               <StoryPhoto id={story.id} />
+              <div className="sec">Record</div>
               <dl>
                 <dt>Site</dt><dd><TextEffect per="word" trigger={!leaving} delay={0.25}>{story.site}</TextEffect></dd>
                 <dt>{isDeep ? 'Launched' : 'Arrived'}</dt><dd><TextEffect trigger={!leaving} delay={0.3}>{fmtDate(story.arrived)}</TextEffect></dd>
@@ -234,10 +242,12 @@ export default function App() {
                   ? <><dt>Distance</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${AU.get(story.id)} AU from the Sun`}</TextEffect></dd></>
                   : <><dt>Coords</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${story.lat.toFixed(2)}°, ${story.lon.toFixed(2)}°`}</TextEffect></dd></>}
               </dl>
-              {terrain && <SunNow lat={story.lat} lon={story.lon} name={story.mission} body={terrain} />}
+              {terrain && <><div className="sec">At the site now<i>live</i></div><SunNow lat={story.lat} lon={story.lon} body={terrain} /></>}
+              <div className="sec">Story</div>
               <TextEffect as="p" per="word" trigger={!leaving} delay={0.45}>{story.story}</TextEffect>
-              <div className="dyk"><span>DID YOU KNOW?</span><TextEffect per="word" trigger={!leaving} delay={0.8}>{story.didYouKnow}</TextEffect></div>
-              <a href={story.source} target="_blank" rel="noreferrer">NASA RECORD →</a>
+              <a className="story__src" href={story.source} target="_blank" rel="noreferrer">
+                <span>Source</span>{new URL(story.source).hostname.replace(/^www\./, '')}
+              </a>
             </div>
           ) : (
             <>
@@ -305,7 +315,7 @@ export default function App() {
             ? <SiteClock key={`clock-${planet}`} body={terrain} list={list} selectedId={selectedId} onSelect={setSelectedId} />
             : <SignalDelay onSelect={setSelectedId} />}
 
-          <SignalMap world={planet} list={list} shown={items} selectedId={selectedId} onSelect={setSelectedId} fmtDate={fmtDate} />
+          <SignalMap world={planet} list={list} shown={items} talking={talking} selectedId={selectedId} onSelect={setSelectedId} />
 
           <SignalChart key={`chart-${planet}`} planet={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} onTime={setUntil} />
         </section>

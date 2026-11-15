@@ -12,6 +12,7 @@ import { features, marsFeatures } from '../data/features'
 import { STACKED_QUERY } from '../layout'
 import { FeatureProjector, LaserBeams, Traverses } from './overlays'
 import { isBooted, markProgress, markSceneReady, useBooted } from '../boot'
+import { statusAt, useDying } from '../ui/useDying'
 import { fmtKm, heightGauge, nearestFeature, nearestSite } from './probeInfo'
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
   trueScale: boolean
   /** Lava-flood level in km of real elevation, or null for no lava */
   lavaLevel: number | null
+  /** silent objects still talking at the timeline playhead */
+  talking: ReadonlySet<string>
 }
 
 type Vec3 = [number, number, number]
@@ -74,6 +77,11 @@ export interface ProbeHit {
 
 /** Crosshair size: outer corner this many px from the center (at the probe's distance). */
 const RETICLE_PX = 18
+/** Click snap: corner ticks close in over SNAP_IN_S, then ease back out over SNAP_OUT_S. */
+const SNAP_IN_S = 0.06
+const SNAP_OUT_S = 0.28
+/** A press that moves more than this (px) was a camera drag, not a click. */
+const CLICK_SLOP_PX = 4
 
 function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
   dem: Dem
@@ -145,7 +153,7 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
 
   // Elevation probe: real LOLA value under the cursor (plateau only; the apron isn't real data).
   // The crosshair and live contour live in the grid shader; this only feeds its uniforms.
-  const probe = useRef({ on: false, point: new THREE.Vector3() })
+  const probe = useRef({ on: false, point: new THREE.Vector3(), snapAt: -1 })
   const hide = () => { probe.current.on = false; onProbe(null) }
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     if (e.pointerType === 'touch') return
@@ -161,6 +169,11 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
     }
     onProbe({ lon, lat, meters: dem.metersAt(lon, lat), sx: e.nativeEvent.offsetX, sy: e.nativeEvent.offsetY })
   }
+  // Click on the map (not the end of an orbit drag): snap the crosshair.
+  const onClick = (e: ThreeEvent<MouseEvent>) => {
+    if (skip || !probe.current.on || e.delta > CLICK_SLOP_PX) return
+    probe.current.snapAt = performance.now() / 1000
+  }
   // Fade the probe in/out, and keep the crosshair a constant size on screen.
   useFrame(({ camera, size }, delta) => {
     const u = matRef.current?.uniforms
@@ -170,10 +183,15 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
     const fov = (camera as THREE.PerspectiveCamera).fov * THREE.MathUtils.DEG2RAD
     const pxWorld = (2 * Math.tan(fov / 2) * camera.position.distanceTo(probe.current.point)) / size.height
     u.uReticle.value = RETICLE_PX * pxWorld
+    // snap envelope: fast linear in, ease-out cubic back
+    const t = performance.now() / 1000 - probe.current.snapAt
+    u.uSnap.value = probe.current.snapAt < 0 || t > SNAP_IN_S + SNAP_OUT_S ? 0
+      : t < SNAP_IN_S ? t / SNAP_IN_S
+      : Math.pow(1 - (t - SNAP_IN_S) / SNAP_OUT_S, 3)
   })
 
   // Solid surface + grid drawn in the shader: hills naturally hide the lines behind them.
-  return <mesh geometry={geo} material={mat} onPointerMove={onMove} onPointerOut={hide} />
+  return <mesh geometry={geo} material={mat} onPointerMove={onMove} onPointerOut={hide} onClick={onClick} />
 }
 
 /**
@@ -285,7 +303,8 @@ function CameraRig({ selectedId, positions }: { selectedId: string | null; posit
 }
 
 /** Key this component by planet: it reads the active planet (terrain.ts) once per mount. */
-export default function MoonScene({ items, selectedId, onSelect, trueScale, lavaLevel }: Props) {
+export default function MoonScene({ items, selectedId, onSelect, trueScale, lavaLevel, talking }: Props) {
+  const dying = useDying(items, talking)
   const planet = activePlanet()
   const isMoon = planet.id === 'moon'
   const feats = isMoon ? features : marsFeatures
@@ -376,10 +395,11 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
         <svg className="probe__lead" width="34" height="28" viewBox="0 0 34 28">
           <polyline points="10,18 22,6 34,6" />
         </svg>
-        {/* two rows: place + elevation, then height gauge + nearest landing site */}
+        {/* two rows split by the leader line running through: place + elevation / gauge + nearest site */}
         <div className="probe__box">
           <span className="probe__place"><span ref={part('place')} /><span className="probe__dir" ref={part('placeDir')} /></span>
           <b className="probe__elev" ref={part('elev')} />
+          <i className="probe__rule" />
           <span className="probe__gauge">lo <span ref={part('g1')} /><b>▲</b><span ref={part('g2')} /> hi</span>
           <span className="probe__site" ref={part('siteRow')}>
             <i /><span ref={part('site')} /><span className="probe__dir" ref={part('siteDir')} />
@@ -403,7 +423,7 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
           <button
             key={h.id}
             ref={(el) => { if (el) els.current.set(h.id, el); else els.current.delete(h.id) }}
-            className={`marker marker--${h.status}${h.id === selectedId ? ' is-selected' : ''}`}
+            className={`marker marker--${statusAt(h, talking)}${h.id === selectedId ? ' is-selected' : ''}${dying.has(h.id) ? ' is-dying' : ''}`}
             onClick={() => onSelect(h.id)}
             aria-label={`${h.mission} — ${h.name}`}
             data-label={`${h.mission.toUpperCase()} · ${h.name}`}

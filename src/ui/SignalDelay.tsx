@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { deepSpaceHardware } from '../data/deepspace'
+import { sendPing } from '../scene/pings'
 
 /**
  * Deep Space bottom-left panel (Moon/Mars show "Day & night now" here, src/ui/SiteClock.tsx): how long a radio message
@@ -53,7 +54,7 @@ export default function SignalDelay({ onSelect }: { onSelect: (id: string) => vo
               {at == null ? (
                 <>
                   <span className="delay__time">{fmtDur(secs)} one way</span>
-                  <button className="delay__ping" onClick={() => { setSent((s) => ({ ...s, [h.id]: Date.now() })); setNow(Date.now()) }}>[ PING ]</button>
+                  <button className="delay__ping" onClick={() => { setSent((s) => ({ ...s, [h.id]: Date.now() })); setNow(Date.now()); sendPing(h.id) /* the map plays the trip */ }}>[ PING ]</button>
                 </>
               ) : left > 0 ? (
                 <span className="delay__fly ok">

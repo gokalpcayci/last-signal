@@ -327,6 +327,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uProbeKm: { value: 0 },                // its mesh elevation (km), for the live contour
       uProbeOn: { value: 0 },                // 0–1 fade
       uReticle: { value: 1 },                // crosshair size in world units (≈ constant px)
+      uSnap: { value: 0 },                   // 0–1 click pulse: corner ticks pull in, then return
     },
     vertexShader: /* glsl */ `
       attribute vec3 color;
@@ -373,6 +374,7 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uniform float uProbeKm;
       uniform float uProbeOn;
       uniform float uReticle;
+      uniform float uSnap;
       varying vec2 vUv;
       varying vec3 vColor;
       varying float vDepth;
@@ -495,9 +497,12 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
           float arms = max(
             hair(p.y, pw.y, 0.8) * step(0.22, a.x) * step(a.x, 0.62),
             hair(p.x, pw.x, 0.8) * step(0.22, a.y) * step(a.y, 0.62));
+          // click: the corner ticks close in on the center like a focusing camera (uSnap)
+          float R = 1.0 - 0.38 * uSnap;
+          float T = R - 0.34;
           float ticks = max(
-            hair(a.x - 1.0, pw.x, 0.8) * step(0.66, a.y) * step(a.y, 1.0),
-            hair(a.y - 1.0, pw.y, 0.8) * step(0.66, a.x) * step(a.x, 1.0));
+            hair(a.x - R, pw.x, 0.8 + uSnap * 0.4) * step(T, a.y) * step(a.y, R),
+            hair(a.y - R, pw.y, 0.8 + uSnap * 0.4) * step(T, a.x) * step(a.x, R));
           // dark under-halo first, so the white hairline reads on bright halftone too
           float halo = max(hair(p.y, pw.y, 2.2) * step(0.2, a.x) * step(a.x, 0.64),
                            hair(p.x, pw.x, 2.2) * step(0.2, a.y) * step(a.y, 0.64));

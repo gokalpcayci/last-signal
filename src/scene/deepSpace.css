@@ -1,0 +1,13 @@
+/* Deep Space map extras (src/scene/DeepSpaceScene.tsx) */
+
+/* the LED layer: probes, trails, labels, stars, pulses, HUD — drawn on the plane's LED grid */
+.ds-led { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+
+/* markers and clusters stay as invisible hit targets (keyboard + screen readers); the LED layer draws them */
+.deep .marker { width: 32px; height: 32px; padding: 0; min-width: 0; min-height: 0; }
+.deep .marker__ink, .deep .marker__stem { display: none; }
+.deep .marker::after { display: none; }
+.deep .marker:focus-visible, .ds-cluster:focus-visible { outline: 1px dashed var(--line-strong); outline-offset: 2px; }
+.deep .markers.is-booting .marker { animation: none; }
+
+.ds-cluster { position: absolute; top: 0; left: 0; pointer-events: auto; z-index: 9000; width: 40px; height: 40px; }

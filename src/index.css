@@ -143,14 +143,24 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .story__mission { font: 10px var(--mono); color: var(--dim); }
 .close { font-size: 18px; color: var(--dim); line-height: 1; }
 .close:hover { color: var(--text); }
-.pill { font: 9px var(--mono); padding: 3px 7px; border: 1px solid; letter-spacing: 0.06em; }
-.pill--active { color: var(--ok); }
-.pill--silent { color: var(--warn); }
-.story dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font: 10.5px var(--mono); margin-bottom: 12px; }
+/* status: a one-line signal trace in the timeline's ASCII language (▪ landed, = talking, :. decay, × quiet) */
+.status { display: inline-flex; align-items: baseline; gap: 8px; font: 10px var(--mono); letter-spacing: 0.08em; color: var(--text); white-space: pre; font-variant-ligatures: none; }
+.status__key { color: var(--dim); }
+.status__trace { letter-spacing: 0; }
+.status--active .status__trace { color: var(--ok); }
+.status--silent .status__trace { color: var(--warn); }
+/* section label: mono caption + dashed rule running to the edge, optional right tag */
+.sec { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font: 9px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.sec::after { content: ''; flex: 1; border-top: 1px dashed var(--line-strong); }
+.sec i { order: 2; font-style: normal; color: var(--text); }
+/* spec table: label left, value right, hairline between rows */
+.story dl { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; font: 10.5px var(--mono); margin-bottom: 14px; }
+.story dt, .story dd { padding: 4px 0; border-bottom: 1px solid var(--line); }
 .story dt { color: var(--dim); }
-.story p { font-size: 12.5px; color: #cfcfc6; margin-bottom: 12px; }
-.dyk { font-size: 12px; border-left: 2px solid var(--gold); padding: 4px 0 4px 10px; margin-bottom: 12px; color: #d9d6c4; }
-.dyk span { display: block; font: 9px var(--mono); color: var(--gold); margin-bottom: 2px; letter-spacing: .08em; }
+.story dd { text-align: right; }
+.story p { font-size: 12.5px; line-height: 1.55; color: #cfcfc6; margin: 6px 0 14px; }
+.story__src { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.story__src span { color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; font-size: 9px; }
 /* story photo: a received frame, muted to sit in the dark UI; hatched while it loads */
 .photo { margin: 0 0 12px; }
 .photo__frame { position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden; border: 1px solid var(--line-strong);
@@ -162,11 +172,23 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .photo__tag, .photo__wait { position: absolute; font: 9px var(--mono); letter-spacing: 0.06em; }
 .photo__tag { left: 6px; top: 6px; padding: 2px 5px; background: rgba(13,14,13,0.75); color: var(--text); }
 .photo__wait { inset: 0; display: grid; place-items: center; color: var(--dim); }
+/* pixel swap canvas: same muted grade as the photo so the hand-off is seamless */
+.photo__px { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated;
+  filter: saturate(0.7) contrast(1.05) brightness(0.92); }
+.photo__px[hidden] { display: none; }
+.photo__frame:hover .photo__px { filter: none; }
+/* one LED square per photo, lit = on screen */
+.photo__count { position: absolute; right: 6px; top: 6px; display: flex; gap: 3px; padding: 3px; background: rgba(13,14,13,0.75); }
+.photo__count i { width: 5px; height: 5px; background: var(--faint); }
+.photo__count i.is-on { background: var(--text); }
 .photo figcaption { font-size: 11px; line-height: 1.4; color: #b9b9b0; margin-top: 6px; }
-.photo__id { display: block; font: 9px var(--mono); color: var(--dim); letter-spacing: 0.04em; margin-bottom: 2px; }
+.photo__caps { display: grid; }
+.photo__cap { grid-area: 1 / 1; }
+.photo__id { display: flex; justify-content: space-between; gap: 8px; font: 9px var(--mono); color: var(--dim); letter-spacing: 0.04em; margin-bottom: 2px; }
+.photo__id b { font-weight: 400; color: var(--text); flex: none; }
 @media (prefers-reduced-motion: reduce) { .photo__frame img { transition: none; } }
-.story a { font: 10px var(--mono); color: var(--dim); text-decoration: none; }
-.story a:hover { color: var(--text); }
+.story a { font: 10px var(--mono); color: var(--text); text-decoration: none; }
+.story a:hover { color: #fff; }
 
 /* ── toolbar ─────────────────────────────── */
 .toolbar { position: absolute; z-index: 10; left: 50%; transform: translateX(-50%);
@@ -295,7 +317,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .globe { display: none; }
   .view { margin-bottom: 0; }
   .story h2 { font-size: 20px; }
-  .story p, .dyk, .sunnow { font-size: 14px; }
+  .story p { font-size: 14px; }
   .story dl { font-size: 12px; }
 
   .bottom { position: static; order: 5; height: auto; grid-template-columns: 1fr; background: none; border: 0; }
@@ -327,8 +349,31 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .markers.is-waiting .marker { visibility: hidden; }
 .markers.is-booting .marker { animation: marker-in .5s cubic-bezier(.2,.9,.3,1.3) both; animation-delay: var(--ping-delay, 0s); }
 @keyframes marker-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* going quiet during time travel (1.1 s = DYING_MS): a small green/orange split + 1–2 px tear on the
+   whole marker, while the glyph stutters and dies to orange. `translate` composes with the
+   projector's inline transform. */
+.markers .marker.is-dying { animation: marker-split 1.1s both steps(1, end); }
+.markers .marker.is-dying .marker__ink { animation: marker-die 1.1s both steps(1, end); }
+@keyframes marker-split {
+  0%   { translate: 2px 0; filter: drop-shadow(-2px 0 0 rgba(95, 208, 104, .75)) drop-shadow(2px 0 0 rgba(229, 107, 71, .75)); }
+  9%   { translate: 0 0; filter: none; }
+  40%  { translate: -1px 0; filter: drop-shadow(-1px 0 0 rgba(95, 208, 104, .6)) drop-shadow(1px 0 0 rgba(229, 107, 71, .6)); }
+  48%, 100% { translate: 0 0; filter: none; }
+}
+@keyframes marker-die {
+  0%   { background: var(--ok); opacity: 1; }
+  14%  { opacity: .2; }
+  22%  { background: var(--ok); opacity: 1; }
+  30%  { opacity: .1; }
+  38%  { background: var(--text); opacity: 1; }
+  46%  { background: var(--warn); opacity: .15; }
+  62%  { opacity: .6; }
+  74%  { opacity: .2; }
+  100% { background: var(--warn); opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .markers.is-booting .marker { animation: none; }
+  .markers.is-booting .marker, .markers .marker.is-dying, .markers .marker.is-dying .marker__ink { animation: none; }
 }
 
 /* ── elevation probe readout ── */
@@ -342,24 +387,42 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .probe.is-flipx .probe__lead { transform: scaleX(-1); }
 .probe.is-flipy .probe__lead { transform: scaleY(-1); }
 .probe.is-flipx.is-flipy .probe__lead { transform: scale(-1, -1); }
-.probe__box { position: absolute; left: 34px; top: -22px; transform: translateY(-50%);
-  white-space: nowrap; font: 9.5px var(--mono); letter-spacing: .03em; color: var(--dim);
-  background: rgba(16,17,15,.92); border: 1px solid var(--line-strong); border-left: 2px solid var(--text);
-  padding: 4px 8px; display: grid; grid-template-columns: auto auto; gap: 2px 14px; align-items: baseline; }
-.probe.is-flipx .probe__box { left: auto; right: 34px; border-left-width: 1px; border-right: 2px solid var(--text); }
-.probe.is-flipy .probe__box { top: 22px; }
-.probe__place { font: 600 10px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
-.probe__dir { margin-left: 6px; font: 9.5px var(--mono); color: var(--dim); text-transform: none; }
-.probe__elev, .probe__site { justify-self: end; font-weight: 400; color: var(--text); }
+/* Drawn like a survey annotation, not a tooltip card: no border, a hatched scrim, corner
+   ticks that echo the crosshair's, and the leader runs on through the box as the row rule.
+   Rule offset from the box top = pad 6 + row-1 line 15 + gap 3 = 24px → top = −22 − 24. */
+.probe__box { --tk: rgba(230,230,223,.75); position: absolute; left: 34px; top: -46px;
+  white-space: nowrap; font: 9px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
+  padding: 6px 10px 6px; display: grid; grid-template-columns: auto auto; gap: 3px 18px; align-items: baseline;
+  background:
+    linear-gradient(var(--tk), var(--tk)) left top / 5px 1px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left top / 1px 5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / 5px 1px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / 1px 5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / 5px 1px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / 1px 5px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / 5px 1px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / 1px 5px no-repeat,
+    repeating-linear-gradient(135deg, transparent 0 4px, rgba(255,255,255,.035) 4px 5px),
+    rgba(13,14,13,.8);
+  backdrop-filter: blur(2px); }
+.probe.is-flipx .probe__box { left: auto; right: 34px; }
+.probe.is-flipy .probe__box { top: -2px; }
+.probe__place, .probe__elev { font: 500 13px/15px var(--display); letter-spacing: -0.04em; text-transform: none; color: var(--text); }
+.probe__dir { margin-left: 8px; font: 9px var(--mono); letter-spacing: .04em; color: var(--dim); }
+.probe__elev, .probe__site { justify-self: end; }
+/* the leader's horizontal stroke, carried edge to edge (bleeds 10px past the padding) */
+.probe__rule { grid-column: 1 / -1; height: 1px; margin: 0 -10px; background: rgba(230,230,223,.7); }
+.probe__gauge { color: var(--dim); letter-spacing: .02em; }
 .probe__gauge b { font-weight: 400; color: var(--text); }
-.probe__site i { display: inline-block; width: 4px; height: 4px; margin: 0 5px 1px 0; background: var(--warn); }
+.probe__site { color: #cfcfc6; }
+.probe__site i { display: inline-block; width: 4px; height: 4px; margin: 0 6px 1px 0; background: var(--warn); }
 .probe__site.is-active i { background: var(--ok); }
 
 /* ── live day/night line in the story panel ── */
-.sunnow { font-size: 12px; color: #cfcfc6; border: 1px solid var(--line); padding: 8px 10px; margin-bottom: 12px; background: #121311; }
-.sunnow__tag { display: block; font: 9px var(--mono); letter-spacing: .08em; margin-bottom: 3px; }
-.sunnow--day .sunnow__tag { color: #e8b25a; }
-.sunnow--night .sunnow__tag { color: #8fa6c8; }
+.story .sunnow dl { margin-bottom: 6px; }
+.sunnow--day .sunnow__state { color: #e8b25a; }
+.sunnow--night .sunnow__state { color: #8fa6c8; }
+.story .sunnow__note { font: 10px/1.5 var(--mono); color: var(--dim); margin: 0 0 14px; }
 @media (prefers-reduced-motion: reduce) {
   .nav__drawer, .nav li, .nav__toggle { transition: none !important; }
 }
@@ -447,8 +510,8 @@ html.booting .nav .logo { visibility: hidden; }
 .te--out .te__p { animation: te-out .26s ease-in var(--o, 0s) both; }
 @keyframes te-in { from { opacity: 0; filter: blur(6px); transform: translateY(5px); } }
 @keyframes te-out { to { opacity: 0; filter: blur(6px); transform: translateY(-3px); } }
-.story.is-leaving .pill, .story.is-leaving .close, .story.is-leaving dt, .story.is-leaving .dyk span,
-.story.is-leaving .sunnow { opacity: 0; transition: opacity .25s ease; }
+.story.is-leaving .status, .story.is-leaving .close, .story.is-leaving dt, .story.is-leaving .sec,
+.story.is-leaving .sunnow, .story.is-leaving .story__src { opacity: 0; transition: opacity .25s ease; }
 @media (prefers-reduced-motion: reduce) {
   .te__p, .te-fade, .te--out .te__p { animation: none; }
 }

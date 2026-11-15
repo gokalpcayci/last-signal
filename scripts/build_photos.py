@@ -1,5 +1,5 @@
 """Download the story-panel photos from the NASA Image and Video Library and
-shrink them into public/photos/<object id>.jpg.
+shrink them into public/photos/<object id>.jpg (extras: <object id>-2.jpg, -3.jpg).
 
 The object id -> NASA id mapping is read from src/data/photos.ts, so that file is
 the single source of truth. Run from the repo root:
@@ -23,6 +23,22 @@ MAX_W = 720          # panel is ≤340 css px wide → 2× for retina
 QUALITY = 74
 
 ENTRY = re.compile(r"^\s*'?([\w-]+)'?:\s*\{\s*nasaId:\s*'([^']+)'", re.M)
+EXTRA_KEY = re.compile(r"^\s*'?([\w-]+)'?:\s*\[")
+EXTRA_ID = re.compile(r"nasaId:\s*'([^']+)'")
+
+
+def read_entries(text: str) -> list[tuple[str, str]]:
+    """(file stem, nasa id) for the main photos, then the EXTRA_PHOTOS lists."""
+    main, _, extra = text.partition('export const EXTRA_PHOTOS')
+    out = ENTRY.findall(main)
+    key, n = None, 0
+    for line in extra.splitlines():
+        if m := EXTRA_KEY.match(line):
+            key, n = m.group(1), 1
+        elif key and (m := EXTRA_ID.search(line)):
+            n += 1
+            out.append((f'{key}-{n}', m.group(1)))
+    return out
 
 
 def asset_url(nasa_id: str) -> str:
@@ -39,7 +55,7 @@ def asset_url(nasa_id: str) -> str:
 def main() -> None:
     force = '--force' in sys.argv
     OUT.mkdir(parents=True, exist_ok=True)
-    entries = ENTRY.findall(SRC.read_text())
+    entries = read_entries(SRC.read_text())
     if not entries:
         sys.exit('no photo entries found in photos.ts')
     for obj_id, nasa_id in entries:
