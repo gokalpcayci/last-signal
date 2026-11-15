@@ -248,7 +248,7 @@ export default function App() {
               </div>
               <TextEffect className="story__mission" trigger={!leaving}>{`${up(story.mission)} · ${up(t.kind[story.kind])}`}</TextEffect>
               <TextEffect as="h2" trigger={!leaving} delay={0.1}>{story.name}</TextEffect>
-              <StoryMedia id={story.id} status={story.status} />
+              <StoryMedia id={story.id} />
               <div className="sec">{t.story.record}</div>
               <dl>
                 <dt>{t.story.site}</dt><dd><TextEffect per="word" trigger={!leaving} delay={0.25}>{story.site}</TextEffect></dd>
