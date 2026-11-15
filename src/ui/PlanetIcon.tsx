@@ -22,7 +22,7 @@ export default function PlanetIcon({ id, active, size }: { id: WorldId; active: 
   useEffect(() => {
     const c = canvas.current
     if (!c) return
-    const e = new LedEngine(c, { grid: discGrid(), mode: 'boot', ink: INK[id], signals: false, glitch: 0.6, ghost: 0.09 })
+    const e = new LedEngine(c, { grid: discGrid(), mode: 'boot', ink: INK[id], signals: false, glitch: 0.6, ghost: id === 'deep' ? 0.05 : 0.09 })
     engine.current = e
     e.resize(size)
     e.setMask([], { instant: true }) // ghost disc until the albedo arrives
@@ -59,7 +59,7 @@ export function OrbitLabel({ size, text }: { size: number; text: string }) {
   // left → over the top → right, so the text reads left to right
   const d = `M ${c - r} ${c} A ${r} ${r} 0 0 1 ${c + r} ${c}`
   return (
-    <svg className="orbit-label" width={box} height={box} viewBox={`0 0 ${box} ${box}`} aria-hidden>
+    <svg className={`orbit-label${text.length > 6 ? ' orbit-label--long' : ''}`} width={box} height={box} viewBox={`0 0 ${box} ${box}`} aria-hidden>
       <path id={id} d={d} fill="none" />
       <text><textPath href={`#${id}`} startOffset="50%" textAnchor="middle">{text}</textPath></text>
     </svg>

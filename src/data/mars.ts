@@ -107,7 +107,7 @@ export const marsHardware: Hardware[] = [
     source: 'https://science.nasa.gov/mission/mars-2020-perseverance/',
   },
   {
-    id: 'ingenuity', name: 'Ingenuity', mission: 'Mars 2020', kind: 'helicopter', status: 'silent',
+    approx: true, id: 'ingenuity', name: 'Ingenuity', mission: 'Mars 2020', kind: 'helicopter', status: 'silent',
     lat: 18.47, lon: 77.39, year: 2021, site: 'Jezero Crater',
     arrived: '2021-02-18', lastSignal: '2024-04-16',
     story: 'A tiny helicopter that rode to Mars under Perseverance’s belly. It was planned to fly 5 times — it flew 72 times, until a damaged rotor blade grounded it for good.',
@@ -115,7 +115,7 @@ export const marsHardware: Hardware[] = [
     source: 'https://science.nasa.gov/mission/mars-2020-perseverance/ingenuity-mars-helicopter/',
   },
   {
-    id: 'three-forks', name: 'Three Forks Sample Depot', mission: 'Mars 2020', kind: 'science', status: 'active',
+    approx: true, id: 'three-forks', name: 'Three Forks Sample Depot', mission: 'Mars 2020', kind: 'science', status: 'active',
     lat: 18.45, lon: 77.45, year: 2023, site: 'Jezero Crater',
     arrived: '2023-01-28', lastSignal: 'Waiting for pickup',
     story: 'Perseverance dropped 10 sealed tubes on the ground — rock and soil samples, one of Martian air and one empty “witness” tube —, one by one, like a treasure cache. They are a backup in case a future mission needs to collect samples from the ground.',

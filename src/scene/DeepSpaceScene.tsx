@@ -8,7 +8,7 @@ import { isBooted, markProgress, markSceneReady, useBooted } from '../boot'
 import './deepSpace.css'
 import { CONSTELLATIONS, DESTINATIONS, eclipticOf } from '../data/stars'
 import { DEEP_SKY, milkyWay } from '../data/deepSky'
-import { bigText, cellOf, gridFor, led, ledLine, microSprite, microText, plate, sprite, textWidth, type Ctx, type Grid } from './ledLayer'
+import { bigText, cellOf, gridFor, led, ledLine, microText, plate, sprite, textWidth, type Ctx, type Grid } from './ledLayer'
 import { livePings, PULSE_S } from './pings'
 import { T, stringsFor } from '../strings'
 import { up, useLang } from '../i18n'
@@ -476,11 +476,8 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
 
     // screen furniture is off limits for labels
     const bottomRow = stacked ? 0 : Math.min(240, Math.max(150, H * 0.25))
-    const LEGEND_H = 104
-    const legendTop = H - bottomRow - 16 - LEGEND_H
     if (!stacked) {
-      boxes.push([16, legendTop + LEGEND_H - 64, 270, H - bottomRow])           // legend (compact, two columns)
-      boxes.push([0, legendTop - 26, 150, legendTop + 44])                      // compass
+      boxes.push([0, H - bottomRow - 92, 150, H - bottomRow])                   // compass
       boxes.push([0, H - bottomRow, W, H])                                      // bottom row of panels
       const panel = Math.min(340, Math.max(250, W * 0.2))
       boxes.push([W - panel - 30, H * 0.3, W, H])                               // right column
@@ -810,41 +807,37 @@ function LedLayer({ paths, items, until, shared, selectedId, canvas, els, positi
       }
     }
 
-    // 7. HUD (desktop): compass + legend, bottom-left of the visible map
+    // 7. HUD (desktop): compass, bottom-left of the visible map (the key is the bottom-left panel)
     if (!stacked) {
-      const cx = 40, cy = legendTop + 14
+      // compass: which way is ecliptic north (N) and longitude 0° (the vernal equinox), turning with the camera.
+      // Fine dotted arms; each label sits past its arm's tip, never on it.
+      const cx = 46, cy = H - bottomRow - 46
       const o0 = project(new THREE.Vector3(0, 0, 0), false), ox = project(new THREE.Vector3(10, 0, 0), false), oy = project(new THREE.Vector3(0, 10, 0), false)
       if (o0 && ox && oy) {
-        const arm = (q: { x: number; y: number }, lab: string) => {
-          const dx = q.x - o0.x, dy = q.y - o0.y, l = Math.hypot(dx, dy) || 1
-          const ex = cx + (dx / l) * 26, ey = cy + (dy / l) * 26
-          ledLine(ctx, grid, pr, cx, cy, ex, ey, COL.dim, (u) => 0.25 + 0.55 * u)
-          microText(ctx, lab, ex + (dx / l) * 6 - 4, ey + (dy / l) * 6 - 4, COL.dim, 0.9)
+        const ARM = 22
+        const arm = (q: { x: number; y: number }, lab: string, color: string) => {
+          const dx = q.x - o0.x, dy = q.y - o0.y, l = Math.hypot(dx, dy)
+          if (l < 6) return // pointing (almost) straight at us: no readable direction
+          const ux = dx / l, uy = dy / l
+          g.fillStyle = color
+          for (let k = 2; k <= ARM; k += 3) {
+            g.globalAlpha = 0.3 + 0.6 * (k / ARM)
+            g.fillRect(Math.round((cx + ux * k) * pr), Math.round((cy + uy * k) * pr), Math.max(1, pr * 1.4), Math.max(1, pr * 1.4))
+          }
+          g.globalAlpha = 1
+          // little arrowhead: two dots either side of the tip
+          for (const sgn of [-1, 1]) g.fillRect(Math.round((cx + ux * (ARM - 3) - uy * 2.5 * sgn) * pr), Math.round((cy + uy * (ARM - 3) + ux * 2.5 * sgn) * pr), Math.max(1, pr * 1.4), Math.max(1, pr * 1.4))
+          const w = textWidth(lab, 1.5)
+          const tx = cx + ux * (ARM + 6), ty = cy + uy * (ARM + 6)
+          const lx = ux < -0.35 ? tx - w : ux > 0.35 ? tx : tx - w / 2
+          const ly = uy < -0.35 ? ty - 8 : uy > 0.35 ? ty : ty - 4
+          microText(ctx, lab, lx, ly, color, 0.95, 1.5)
         }
-        arm(ox, T().deep.equinox)
-        arm(oy, T().deep.north)
-        ledAt(cx, cy, COL.sun, 0.9)
+        arm(ox, '0°', COL.dim)
+        arm(oy, 'N', COL.text)
+        g.fillStyle = COL.sun
+        g.fillRect(Math.round((cx - 1.5) * pr), Math.round((cy - 1.5) * pr), Math.round(3 * pr), Math.round(3 * pr))
       }
-      // legend: what each mark means — small font, two columns, short words
-      const P = 1.5, lh = 10, colW = 118
-      const lx = 22
-      const rows: [() => void, string, string][] = [
-        [() => microSprite(ctx, 'probe', lx, 0, COL.ok, 1.2), T().deep.legend[0], COL.ok],
-        [() => microSprite(ctx, 'probe', lx, 0, COL.warn, 1.2), T().deep.legend[1], COL.warn],
-        [() => microSprite(ctx, 'telescope', lx, 0, COL.dim, 1.2), T().deep.legend[2], COL.dim],
-        [() => { for (const [dx, dy] of [[0, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { g.fillStyle = COL.warn; g.fillRect((lx + 3 + dx * 2) * pr, (3 + dy * 2) * pr, 1.5 * pr, 1.5 * pr) } }, T().deep.legend[3], COL.warn],
-        [() => { g.fillStyle = COL.planet; g.fillRect((lx + 1) * pr, 1 * pr, 5 * pr, 5 * pr) }, T().deep.legend[4], COL.dim],
-        [() => { g.fillStyle = COL.sun; g.fillRect((lx + 2) * pr, 2 * pr, 3 * pr, 3 * pr) }, T().deep.legend[5], COL.dim],
-        [() => { for (let k = 0; k < 3; k++) { g.fillStyle = COL.warn; g.globalAlpha = 0.6; g.fillRect((lx + k * 3) * pr, 3 * pr, 1.5 * pr, 1.5 * pr) } g.globalAlpha = 1 }, T().deep.legend[6], COL.dim],
-        [() => { g.fillStyle = '#4a6274'; for (let k = 0; k < 3; k++) g.fillRect((lx + k * 3) * pr, (1 + (k % 2) * 3) * pr, 1.5 * pr, 1.5 * pr) }, T().deep.legend[7], COL.dim],
-      ]
-      const top = legendTop + LEGEND_H - Math.ceil(rows.length / 2) * lh - 12
-      microText(ctx, T().deep.key, lx, top, COL.faint, 0.9, P)
-      rows.forEach(([icon, txt, color], k) => {
-        const cx0 = (k % 2) * colW, cy0 = top + 11 + Math.floor(k / 2) * lh
-        g.save(); g.translate(cx0 * pr, cy0 * pr); icon(); g.restore()
-        microText(ctx, txt, lx + cx0 + 11, cy0, color, 0.9, P)
-      })
     }
   })
   return null

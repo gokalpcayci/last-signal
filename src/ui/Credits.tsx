@@ -12,7 +12,12 @@ import './credits.css'
  * back button close it. Printed as a mission sheet: dashed rules, mono labels, Daktilo names.
  */
 
-const AUTHORS = ['Gökalp Çaycı', 'Uygar Yıldırım']
+const AUTHORS = [
+  { name: 'Gökalp Çaycı', linkedin: 'https://www.linkedin.com/in/gklpcyc/' },
+  { name: 'Uygar Yıldırım', linkedin: 'https://www.linkedin.com/in/uygaryildirimm/' },
+]
+/** how long the close ("CRT power-off") plays before the sheet unmounts; keep in sync with credits.css */
+export const CREDITS_EXIT_MS = 560
 const HASH = '#credits'
 
 /** open state <-> location.hash */
@@ -33,7 +38,7 @@ export function useCreditsRoute(): [boolean, (open: boolean) => void] {
   return [open, set]
 }
 
-export default function Credits({ onClose }: { onClose: () => void }) {
+export default function Credits({ onClose, leaving = false }: { onClose: () => void; leaving?: boolean }) {
   const t = useT().credits
   const lang = useLang()
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -46,7 +51,7 @@ export default function Credits({ onClose }: { onClose: () => void }) {
   }, [onClose])
 
   return (
-    <div className="credits" role="dialog" aria-modal="true" aria-labelledby="credits-title">
+    <div className={`credits${leaving ? ' is-leaving' : ''}`} role="dialog" aria-modal="true" aria-labelledby="credits-title">
       <div className="credits__sheet" key={lang}>
         <header className="credits__top">
           <LedLogo className="credits__logo" width={56} />
@@ -66,10 +71,12 @@ export default function Credits({ onClose }: { onClose: () => void }) {
           <h2 className="credits__label">{t.authors}</h2>
           <ol className="credits__authors">
             {AUTHORS.map((a, i) => (
-              <li key={a}>
+              <li key={a.name}>
                 <span className="credits__idx">{String(i + 1).padStart(2, '0')}</span>
-                <TextEffect className="credits__name" delay={0.35 + i * 0.15}>{a}</TextEffect>
-                <span className="credits__trace" aria-hidden>▪=========▌</span>
+                <TextEffect className="credits__name" delay={0.35 + i * 0.15}>{a.name}</TextEffect>
+                <a className="credits__link" href={a.linkedin} target="_blank" rel="noreferrer" aria-label={`${a.name} — LinkedIn`}>
+                  <span className="credits__trace" aria-hidden>▪====▌</span>LINKEDIN <span aria-hidden>↗</span>
+                </a>
               </li>
             ))}
           </ol>

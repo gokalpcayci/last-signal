@@ -11,7 +11,7 @@ import type { WorldId } from './scene/planets'
 
 const en = {
   world: {
-    label: { moon: 'Moon', mars: 'Mars', deep: 'Deep' } as Record<WorldId, string>,
+    label: { moon: 'Moon', mars: 'Mars', deep: 'Deep space' } as Record<WorldId, string>,
     /** "Left on the Moon" / "Explore what we left on Mars" */
     where: { moon: 'on the Moon', mars: 'on Mars', deep: 'in deep space' } as Record<WorldId, string>,
     choose: 'Choose a world',
@@ -51,6 +51,14 @@ const en = {
     liveTag: 'live',
     story: 'Story',
     source: 'Source',
+    crew: 'Moonwalkers',
+    location: 'Location',
+    exact: 'Exact (NASA)',
+    approx: 'Approximate',
+    photo: 'PHOTO',
+    model: '3D',
+    modelNote: (rep: boolean): string => rep ? 'NASA 3D model · same design, drag to turn' : 'NASA 3D model · drag to turn',
+    modelLoading: 'RECEIVING MODEL…',
   },
   stat: {
     objects: ' objects',
@@ -69,6 +77,12 @@ const en = {
     lavaLevel: 'LAVA LEVEL',
     lavaAria: 'Lava level in kilometres',
     lavaNote: '3–4 billion years ago, lava flooded the Moon’s low basins and froze into the dark “seas” (maria) you can still see from Earth.',
+    globe: 'GLOBE',
+    globeOn: 'Back to the terrain map',
+    globeOff: 'See the whole world as a globe',
+  },
+  globe: {
+    credit: 'GLOBE VIEW · AFTER OFFWORLD ARCHIVE BY UYGAR YILDIRIM · NASA TREK LOLA / MOLA',
   },
   sun: {
     localTime: 'Local time', day: '☀ DAY', night: '☾ NIGHT', ground: 'Ground',
@@ -168,6 +182,11 @@ const en = {
     equinox: '♈ EQUINOX', north: '↑ N',
     key: 'KEY',
     legend: ['TALKING', 'SILENT', 'TELESCOPE / LANDER', 'LAST SIGNAL', 'PLANET', 'FLYBY', "SUN'S BUBBLE EDGE", 'INTERSTELLAR'],
+    keyTitle: 'Map key',
+    keyHelp: [
+      'still sends signals home', 'no longer heard from', 'telescope · lander on a rock', 'where it was last heard',
+      'bright tail = way it moves', 'close pass by a planet', 'heliopause, ~120 AU', 'the space between stars',
+    ],
     group: 'Group of craft — zoom in',
   },
   credits: {
@@ -188,9 +207,10 @@ const en = {
       ['Mars', 'Viking to Perseverance on MGS MOLA terrain, with live day and night at each site'],
       ['Deep space', 'Pioneer, Voyager and New Horizons on their real JPL Horizons paths'],
       ['Time', 'Scroll a timeline from 1966 to today and watch each signal go quiet'],
+      ['Globe & 3D', 'Whole-world globe view and NASA 3D craft models, after Uygar Yıldırım’s Offworld Archive'],
     ] as [string, string][],
     dataTag: 'Data',
-    data: 'NASA NSSDCA · LRO LOLA · MGS MOLA & TES · JPL Horizons · NASA Image and Video Library',
+    data: 'NASA NSSDCA · LRO LOLA · MGS MOLA & TES · NASA Trek global maps · NASA 3D Resources · JPL Horizons · NASA Image and Video Library',
     signoff: 'END OF TRANSMISSION',
   },
 }
@@ -199,7 +219,7 @@ export type Strings = typeof en
 
 const tr: Strings = {
   world: {
-    label: { moon: 'Ay', mars: 'Mars', deep: 'Derin' },
+    label: { moon: 'Ay', mars: 'Mars', deep: 'Derin uzay' },
     where: { moon: 'Ay’da', mars: 'Mars’ta', deep: 'derin uzayda' },
     choose: 'Bir dünya seç',
     explore: (where) => `${where} bıraktıklarımızı keşfet`,
@@ -238,6 +258,14 @@ const tr: Strings = {
     liveTag: 'canlı',
     story: 'Hikâye',
     source: 'Kaynak',
+    crew: 'Ayda yürüyenler',
+    location: 'Konum',
+    exact: 'Kesin (NASA)',
+    approx: 'Yaklaşık',
+    photo: 'FOTO',
+    model: '3B',
+    modelNote: (rep) => rep ? 'NASA 3B modeli · aynı tasarım, çevirmek için sürükle' : 'NASA 3B modeli · çevirmek için sürükle',
+    modelLoading: 'MODEL ALINIYOR…',
   },
   stat: {
     objects: ' nesne',
@@ -256,6 +284,12 @@ const tr: Strings = {
     lavaLevel: 'LAV SEVİYESİ',
     lavaAria: 'Kilometre cinsinden lav seviyesi',
     lavaNote: '3–4 milyar yıl önce lav, Ay’ın alçak havzalarını doldurdu ve donarak bugün Dünya’dan hâlâ görebildiğin karanlık “denizlere” (maria) dönüştü.',
+    globe: 'KÜRE',
+    globeOn: 'Arazi haritasına dön',
+    globeOff: 'Bütün dünyayı küre olarak gör',
+  },
+  globe: {
+    credit: 'KÜRE GÖRÜNÜMÜ · UYGAR YILDIRIM’IN OFFWORLD ARCHIVE’INDAN · NASA TREK LOLA / MOLA',
   },
   sun: {
     localTime: 'Yerel saat', day: '☀ GÜNDÜZ', night: '☾ GECE', ground: 'Zemin',
@@ -355,6 +389,11 @@ const tr: Strings = {
     equinox: '♈ EKİNOKS', north: '↑ K',
     key: 'ANAHTAR',
     legend: ['KONUŞUYOR', 'SESSİZ', 'TELESKOP / İNİŞ', 'SON SİNYAL', 'GEZEGEN', 'YAKIN GEÇİŞ', 'GÜNEŞ BALONU SINIRI', 'YILDIZLARARASI'],
+    keyTitle: 'Harita anahtarı',
+    keyHelp: [
+      'hâlâ sinyal yolluyor', 'artık sesi gelmiyor', 'teleskop · kayaya inen araç', 'son kez duyulduğu yer',
+      'parlak iz = gidiş yönü', 'gezegenin yakınından geçiş', 'heliopoz, ~120 AB', 'yıldızlar arası boşluk',
+    ],
     group: 'Araç grubu — yakınlaştır',
   },
   credits: {
@@ -375,9 +414,10 @@ const tr: Strings = {
       ['Mars', 'MGS MOLA arazisi üzerinde Viking’den Perseverance’a, her alanda canlı gece ve gündüz'],
       ['Derin uzay', 'Gerçek JPL Horizons yollarında Pioneer, Voyager ve New Horizons'],
       ['Zaman', '1966’dan bugüne bir zaman çizelgesinde gez, her sinyalin susuşunu izle'],
+      ['Küre ve 3B', 'Bütün dünyayı gösteren küre görünümü ve NASA 3B araç modelleri; Uygar Yıldırım’ın Offworld Archive’ından'],
     ],
     dataTag: 'Veri',
-    data: 'NASA NSSDCA · LRO LOLA · MGS MOLA ve TES · JPL Horizons · NASA Görüntü ve Video Kütüphanesi',
+    data: 'NASA NSSDCA · LRO LOLA · MGS MOLA ve TES · NASA Trek küresel haritaları · NASA 3D Resources · JPL Horizons · NASA Görüntü ve Video Kütüphanesi',
     signoff: 'YAYIN SONU',
   },
 }

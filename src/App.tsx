@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MoonScene from './scene/MoonScene'
 import DeepSpaceScene from './scene/DeepSpaceScene'
+import GlobeScene from './scene/GlobeScene'
+import { globeExaggeration } from './scene/globe'
 import Globe from './ui/Globe'
 import { STACKED_QUERY } from './layout'
 import SunNow from './ui/SunNow'
@@ -9,7 +11,7 @@ import { useT } from './strings'
 import { up, useLang, locale } from './i18n'
 import { useLoc } from './data/localize'
 import LangSwitch from './ui/LangSwitch'
-import Credits, { useCreditsRoute } from './ui/Credits'
+import Credits, { CREDITS_EXIT_MS, useCreditsRoute } from './ui/Credits'
 import { marsHardware } from './data/mars'
 import { deepSpaceHardware } from './data/deepspace'
 import { WORLDS, isPlanet, type WorldId } from './scene/planets'
@@ -27,9 +29,10 @@ import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
 import SignalChart, { TIMELINES, toYear } from './ui/SignalChart'
 import SiteClock from './ui/SiteClock'
-import SignalDelay from './ui/SignalDelay'
+import DeepKey from './ui/DeepKey'
 import DistanceLadder from './ui/DistanceLadder'
-import { StoryPhoto } from './ui/StoryPhoto'
+import { StoryMedia } from './ui/StoryMedia'
+import { MOONWALKERS } from './data/crews'
 import TextEffect from './ui/TextEffect'
 import { usePresence } from './ui/usePresence'
 import { exaggeration, setPlanet } from './scene/terrain'
@@ -81,6 +84,8 @@ export default function App() {
   const lang = useLang()
   const L = useLoc()
   const [creditsOpen, setCreditsOpen] = useCreditsRoute()
+  // keep the sheet mounted while its power-off plays
+  const [creditsShown, creditsLeaving] = usePresence(creditsOpen ? true : null, CREDITS_EXIT_MS)
   const worldLabel = t.world.label[planet]
   const where = t.world.where[planet]
   const list = HARDWARE[planet]
@@ -101,6 +106,10 @@ export default function App() {
   const [trueScale, setTrueScale] = useState(false)
   // Lava flood (km of real elevation); null = off. −1.6 km fills roughly the maria.
   const [lava, setLava] = useState<number | null>(null)
+  // Globe mode (Moon / Mars as a whole sphere, after Offworld Archive); ?view=globe opens it
+  const [globe, setGlobe] = useState(() => new URLSearchParams(location.search).get('view') === 'globe')
+  const globeOn = globe && terrain !== null
+  const scaleX = globeOn && terrain ? globeExaggeration(terrain) : exaggeration()
   const currentFilter = t.filter[filter]
   // only offer filters for kinds this body actually has
   const filters = FILTER_IDS.filter((id) => id === 'all' || list.some((h) => h.kind === id)).map((id) => ({ id, label: t.filter[id] }))
@@ -138,6 +147,8 @@ export default function App() {
   // keep the story on screen while its text plays the exit
   const [story, leaving] = usePresence(selected)
   const active = list.filter((h) => h.status === 'active').length
+  // Apollo moonwalkers (keyed by the English mission name; the story may be mid-exit with sel already null)
+  const crew = story ? MOONWALKERS[list.find((h) => h.id === story.id)?.mission ?? ''] : undefined
 
   // LED planet discs, top-right of the map (desktop / tablet). Phones pick the world in MobileNav.
   const discSize = 40
@@ -157,7 +168,7 @@ export default function App() {
   return (
     <div className="page">
       {introPlays && <BootLoader />}
-      {creditsOpen && <Credits onClose={() => setCreditsOpen(false)} />}
+      {creditsShown && <Credits leaving={creditsLeaving} onClose={() => setCreditsOpen(false)} />}
       <div className="frame">
 
         {/* coordinate grid */}
@@ -175,6 +186,8 @@ export default function App() {
         <div className="scene">
           {isDeep
             ? <DeepSpaceScene key="deep" items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} until={until} />
+            : globeOn && terrain
+            ? <GlobeScene key={`globe-${planet}`} planet={terrain} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} talking={talking} />
             : <MoonScene key={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} talking={talking} />}
         </div>
 
@@ -235,7 +248,7 @@ export default function App() {
               </div>
               <TextEffect className="story__mission" trigger={!leaving}>{`${up(story.mission)} · ${up(t.kind[story.kind])}`}</TextEffect>
               <TextEffect as="h2" trigger={!leaving} delay={0.1}>{story.name}</TextEffect>
-              <StoryPhoto id={story.id} />
+              <StoryMedia id={story.id} status={story.status} />
               <div className="sec">{t.story.record}</div>
               <dl>
                 <dt>{t.story.site}</dt><dd><TextEffect per="word" trigger={!leaving} delay={0.25}>{story.site}</TextEffect></dd>
@@ -243,7 +256,9 @@ export default function App() {
                 <dt>{t.story.lastSignal}</dt><dd><TextEffect trigger={!leaving} delay={0.35}>{fmtDate(story.lastSignal)}</TextEffect></dd>
                 {isDeep
                   ? <><dt>{t.story.distance}</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{t.story.au(AU.get(story.id))}</TextEffect></dd></>
-                  : <><dt>{t.story.coords}</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${story.lat.toFixed(2)}°, ${story.lon.toFixed(2)}°`}</TextEffect></dd></>}
+                  : <><dt>{t.story.coords}</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${story.lat.toFixed(2)}°, ${story.lon.toFixed(2)}°`}</TextEffect></dd>
+                    <dt>{t.story.location}</dt><dd className={story.approx ? 'is-approx' : undefined}><TextEffect trigger={!leaving} delay={0.42}>{story.approx ? t.story.approx : t.story.exact}</TextEffect></dd></>}
+                {crew && <><dt>{t.story.crew}</dt><dd><TextEffect per="word" trigger={!leaving} delay={0.44}>{crew.join(' · ')}</TextEffect></dd></>}
               </dl>
               {terrain && <><div className="sec">{t.story.atSite}<i>{t.story.liveTag}</i></div><SunNow lat={story.lat} lon={story.lon} body={terrain} /></>}
               <div className="sec">{t.story.story}</div>
@@ -287,16 +302,22 @@ export default function App() {
             aria-pressed={trueScale}
             title={isDeep
               ? (trueScale ? t.toolbar.deepTrue : t.toolbar.deepLog)
-              : (trueScale ? t.toolbar.planetTrue(worldLabel) : t.toolbar.planetX(exaggeration()))}
+              : (trueScale ? t.toolbar.planetTrue(worldLabel) : t.toolbar.planetX(scaleX))}
             onClick={() => setTrueScale((v) => !v)}
-          >{trueScale ? '1:1' : isDeep ? 'LOG' : `×${exaggeration()}`}</button>
-          {planet === 'moon' && <button
+          >{trueScale ? '1:1' : isDeep ? 'LOG' : `×${scaleX}`}</button>
+          {terrain && <button
+            className={`toolbar__scale toolbar__globe${globeOn ? ' is-on' : ''}`}
+            aria-pressed={globeOn}
+            title={globeOn ? t.toolbar.globeOn : t.toolbar.globeOff}
+            onClick={() => { setGlobe((v) => !v); setLava(null) }}
+          >{t.toolbar.globe}</button>}
+          {planet === 'moon' && !globeOn && <button
             className={`toolbar__scale toolbar__lava${lava !== null ? ' is-on' : ''}`}
             aria-pressed={lava !== null}
             title={t.toolbar.lavaTitle}
             onClick={() => setLava((v) => (v === null ? LAVA_DEFAULT_KM : null))}
           >{t.toolbar.lava}</button>}
-          {planet === 'moon' && lava !== null && (
+          {planet === 'moon' && !globeOn && lava !== null && (
             <div className="lava">
               <div className="lava__head">
                 <span>{t.toolbar.lavaLevel}</span>
@@ -316,7 +337,7 @@ export default function App() {
         <section className="bottom">
           {terrain
             ? <SiteClock key={`clock-${planet}`} body={terrain} list={list} selectedId={selectedId} onSelect={setSelectedId} />
-            : <SignalDelay onSelect={setSelectedId} />}
+            : <DeepKey />}
 
           <SignalMap world={planet} list={list} shown={items} talking={talking} selectedId={selectedId} onSelect={setSelectedId} />
 
