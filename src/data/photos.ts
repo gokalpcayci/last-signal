@@ -60,4 +60,18 @@ export const PHOTOS: Record<string, Photo> = {
   perseverance: { nasaId: 'PIA24542', credit: 'NASA/JPL-Caltech/MSSS', caption: 'Perseverance’s selfie with Ingenuity, about 4 meters away' },
   ingenuity: { nasaId: 'PIA26243', credit: 'NASA/JPL-Caltech', caption: 'After its 72nd and last flight, Ingenuity photographs the shadow of its damaged rotor blade' },
   'three-forks': { nasaId: 'PIA25681', credit: 'NASA/JPL-Caltech/MSSS', caption: 'Perseverance’s selfie with the sample tubes at Three Forks' },
+
+  // ── Deep Space ───────────────────────────────
+  'pioneer-10': { nasaId: 'ARC-1972-AC72-2135', credit: 'NASA Ames', caption: 'Pioneer 10 being readied at Cape Kennedy, with its plaque in place' },
+  'pioneer-11': { nasaId: '9139575', credit: N, caption: 'An Atlas-Centaur rocket lifts off carrying Pioneer 11, April 1973' },
+  'voyager-2': { nasaId: 'PIA01492', credit: JPL, caption: 'Neptune, from Voyager 2’s last whole-planet pictures, taken 4 days before its closest pass' },
+  'voyager-1': { nasaId: 'PIA00452', credit: JPL, caption: 'The “Pale Blue Dot”: Earth seen by Voyager 1 from more than 6 billion km away' },
+  ulysses: { nasaId: 's41-601-009', credit: N, caption: 'Ulysses and its booster drift away from Space Shuttle Discovery, 6 October 1990' },
+  near: { nasaId: 'PIA02923', credit: 'NASA/JHU-APL', view: 'orbit', caption: 'Eros’s northern half, pieced together from NEAR’s photos' },
+  stardust: { nasaId: 'PIA03188', credit: JPL, caption: 'Stardust’s aerogel dust collector' },
+  spitzer: { nasaId: 'PIA23644', credit: 'NASA/JPL-Caltech', caption: 'Spitzer being readied for launch at Cape Canaveral, 2003' },
+  'deep-impact': { nasaId: 'PIA02137', credit: 'NASA/JPL-Caltech/UMD', caption: 'Comet Tempel 1 lights up 67 seconds after Deep Impact’s impactor hit it' },
+  'new-horizons': { nasaId: 'PIA19952', credit: 'NASA/JHU-APL/SwRI', caption: 'Pluto in enhanced color, photographed by New Horizons on 14 July 2015' },
+  dawn: { nasaId: 'PIA21906', credit: 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA', caption: 'Ceres seen by Dawn, centered on Occator Crater, home to its brightest spot' },
+  kepler: { nasaId: 'PIA11188', credit: 'NASA/Ball Aerospace', caption: 'Kepler in a clean room at Ball Aerospace in Boulder, Colorado' },
 }
