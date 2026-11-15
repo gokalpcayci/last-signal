@@ -358,9 +358,28 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 
 /* ── elevation probe readout ── */
-.probe { position: absolute; top: 0; left: 0; z-index: 25; pointer-events: none; white-space: pre;
-  font: 10px var(--mono); letter-spacing: .04em; color: var(--text);
-  background: rgba(16,17,15,.9); border: 1px solid var(--line-strong); padding: 5px 8px; }
+/* Anchored at the cursor (0×0 box); an elbow leader runs up-right to the readout.
+   is-flipx / is-flipy mirror both toward the middle of the map. */
+.probe { position: absolute; top: 0; left: 0; z-index: 25; pointer-events: none;
+  opacity: 0; transition: opacity .12s; }
+.probe.is-on { opacity: 1; }
+.probe__lead { position: absolute; left: 0; top: -28px; overflow: visible; transform-origin: 0 28px; }
+.probe__lead polyline { fill: none; stroke: var(--text); stroke-width: 1; opacity: .7; }
+.probe.is-flipx .probe__lead { transform: scaleX(-1); }
+.probe.is-flipy .probe__lead { transform: scaleY(-1); }
+.probe.is-flipx.is-flipy .probe__lead { transform: scale(-1, -1); }
+.probe__box { position: absolute; left: 34px; top: -22px; transform: translateY(-50%);
+  white-space: nowrap; font: 9.5px var(--mono); letter-spacing: .03em; color: var(--dim);
+  background: rgba(16,17,15,.92); border: 1px solid var(--line-strong); border-left: 2px solid var(--text);
+  padding: 4px 8px; display: grid; grid-template-columns: auto auto; gap: 2px 14px; align-items: baseline; }
+.probe.is-flipx .probe__box { left: auto; right: 34px; border-left-width: 1px; border-right: 2px solid var(--text); }
+.probe.is-flipy .probe__box { top: 22px; }
+.probe__place { font: 600 10px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
+.probe__dir { margin-left: 6px; font: 9.5px var(--mono); color: var(--dim); text-transform: none; }
+.probe__elev, .probe__site { justify-self: end; font-weight: 400; color: var(--text); }
+.probe__gauge b { font-weight: 400; color: var(--text); }
+.probe__site i { display: inline-block; width: 4px; height: 4px; margin: 0 5px 1px 0; background: var(--warn); }
+.probe__site.is-active i { background: var(--ok); }
 
 /* ── live day/night line in the story panel ── */
 .sunnow { font-size: 12px; color: #cfcfc6; border: 1px solid var(--line); padding: 8px 10px; margin-bottom: 12px; background: #121311; }

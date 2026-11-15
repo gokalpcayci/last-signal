@@ -84,6 +84,10 @@ export interface Dem {
   albedoAt: ((lon: number, lat: number) => number) | null
   /** True where the real DEM is shown (the plateau), false on the stylized apron */
   onMap: (x: number, z: number) => boolean
+  /** Mesh elevation in km at world x/z (the smoothed value the aElev attribute holds) */
+  kmAt: (x: number, z: number) => number
+  /** Share of the map (0–1) lower than this many meters — "higher than N% of the map" */
+  percentileOf: (meters: number) => number
   buildGeometry: () => THREE.BufferGeometry
 }
 
@@ -131,9 +135,16 @@ function makeDem(meta: DemMeta, raw: Uint16Array, albedo: Uint8ClampedArray | nu
     return albedo[(r * W + c) * 4] / 255
   })
   const onMap = (x: number, z: number) => mesaMask(x, z) > 0.98
+  // Every 7th pixel, sorted once: enough for a whole-percent answer by binary search.
+  const sample = Float32Array.from({ length: Math.floor(raw.length / 7) }, (_, i) => (raw[i * 7] - 20000) / 2).sort()
+  const percentileOf = (meters: number) => {
+    let lo = 0, hi = sample.length
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (sample[mid] < meters) lo = mid + 1; else hi = mid }
+    return lo / sample.length
+  }
   const heightAt = (x: number, z: number, u?: number) => flatHeightAt(x, z, u) - curvature(x, z)
   const dem: Dem = {
-    heightAt, flatHeightAt, metersAt, albedoAt, onMap, unitsPerKm: P.unitsPerKm,
+    heightAt, flatHeightAt, metersAt, albedoAt, onMap, kmAt, percentileOf, unitsPerKm: P.unitsPerKm,
     buildGeometry: () => buildTerrainGeometry(dem, kmAt),
   }
   return dem
@@ -287,6 +298,7 @@ export const REVEAL_MAX = Math.hypot(WORLD.width / 2, WORLD.depth / 2) + 10
  *  - 1 km contour lines on the plateau (5 km lines brighter)
  *  - live day/night shading from the Sun's position (uSunLon)
  *  - the boot-up reveal: a ring that grows from the center (uReveal)
+ *  - the hover probe: a crosshair draped on the ground + a live contour at its height
  */
 /** uLava value meaning "no lava" (below the deepest near-side point, −5.6 km) */
 export const LAVA_OFF = -9
@@ -311,6 +323,10 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uDegX: { value: 1 / P.xPerDeg },       // world x → degrees lon from the map center
       uDegZ: { value: -1 / P.zPerDeg },      // world z → degrees lat
       uLava: { value: LAVA_OFF },            // lava-flood level in km of real elevation
+      uProbe: { value: new THREE.Vector2() }, // hover point, world x/z
+      uProbeKm: { value: 0 },                // its mesh elevation (km), for the live contour
+      uProbeOn: { value: 0 },                // 0–1 fade
+      uReticle: { value: 1 },                // crosshair size in world units (≈ constant px)
     },
     vertexShader: /* glsl */ `
       attribute vec3 color;
@@ -353,6 +369,10 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
       uniform float uSunLon;
       uniform float uReveal;
       uniform float uLava;
+      uniform vec2 uProbe;
+      uniform float uProbeKm;
+      uniform float uProbeOn;
+      uniform float uReticle;
       varying vec2 vUv;
       varying vec3 vColor;
       varying float vDepth;
@@ -376,6 +396,11 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         float w = fwidth(v);
         float d = abs(fract(v - 0.5) - 0.5) / max(w, 1e-4);
         return 1.0 - smoothstep(widthPx - 0.5, widthPx + 0.5, d);
+      }
+
+      // 1 on a line where v = 0, ~widthPx wide on screen (w = fwidth of v)
+      float hair(float v, float w, float widthPx) {
+        return 1.0 - smoothstep(widthPx - 0.5, widthPx + 0.5, abs(v) / max(w, 1e-4));
       }
 
       void main() {
@@ -454,6 +479,31 @@ export function makeGridMaterial(fogColor: string, fogNear: number, fogFar: numb
         // shoreline: a thin gold line exactly at the level (like a contour, no glow)
         float shore = 1.0 - smoothstep(0.6, 1.4, abs(below) / max(fwidth(vHeight), 1e-4));
         col += gold * shore * 0.5 * flood;
+
+        // ── hover probe. A live contour: everywhere at the same height as the cursor, brightest
+        //    near it. And a surveyor's crosshair ("+" with a gap, plus corner ticks) laid on the
+        //    ground in world x/z, so it follows the relief, hides behind ridges and keeps the
+        //    grid's constant pixel width. uReticle scales with camera distance (≈ fixed px size). ──
+        if (uProbeOn > 0.001) {
+          float iso = hair(vHeight - uProbeKm, fwidth(vHeight), 0.7);
+          float near = exp(-length(vXZ - uProbe) / (uReticle * 5.0));
+          col += vec3(0.9, 0.9, 0.86) * iso * onTop * (0.22 + 0.55 * near) * uProbeOn;
+
+          vec2 p = (vXZ - uProbe) / uReticle;  // 1 = outer corner of the crosshair
+          vec2 pw = fwidth(p);
+          vec2 a = abs(p);
+          float arms = max(
+            hair(p.y, pw.y, 0.8) * step(0.22, a.x) * step(a.x, 0.62),
+            hair(p.x, pw.x, 0.8) * step(0.22, a.y) * step(a.y, 0.62));
+          float ticks = max(
+            hair(a.x - 1.0, pw.x, 0.8) * step(0.66, a.y) * step(a.y, 1.0),
+            hair(a.y - 1.0, pw.y, 0.8) * step(0.66, a.x) * step(a.x, 1.0));
+          // dark under-halo first, so the white hairline reads on bright halftone too
+          float halo = max(hair(p.y, pw.y, 2.2) * step(0.2, a.x) * step(a.x, 0.64),
+                           hair(p.x, pw.x, 2.2) * step(0.2, a.y) * step(a.y, 0.64));
+          col = mix(col, uFill, halo * 0.6 * uProbeOn);
+          col = mix(col, vec3(0.93, 0.93, 0.9), max(arms, ticks) * uProbeOn);
+        }
 
         // bright leading edge while booting
         col += vec3(0.55, 0.85, 0.6) * ring * step(uReveal, ${REVEAL_MAX.toFixed(1)} - 1.0) * 0.6;

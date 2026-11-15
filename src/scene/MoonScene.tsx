@@ -12,6 +12,7 @@ import { features, marsFeatures } from '../data/features'
 import { STACKED_QUERY } from '../layout'
 import { FeatureProjector, LaserBeams, Traverses } from './overlays'
 import { isBooted, markProgress, markSceneReady, useBooted } from '../boot'
+import { fmtKm, heightGauge, nearestFeature, nearestSite } from './probeInfo'
 
 interface Props {
   items: Hardware[]
@@ -62,13 +63,17 @@ function layout(items: Hardware[], dem: Dem | null, unitsPerKm: number) {
 }
 
 export interface ProbeHit {
-  text: string
+  lon: number
+  lat: number
+  /** real LOLA / MOLA elevation, meters */
+  meters: number
   /** pointer position in canvas pixels */
   sx: number
   sy: number
-  /** surface point in world units */
-  point: Vec3
 }
+
+/** Crosshair size: outer corner this many px from the center (at the probe's distance). */
+const RETICLE_PX = 18
 
 function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
   dem: Dem
@@ -139,31 +144,36 @@ function Terrain({ dem, trueScale, lavaLevel, onProbe }: {
   })
 
   // Elevation probe: real LOLA value under the cursor (plateau only; the apron isn't real data).
+  // The crosshair and live contour live in the grid shader; this only feeds its uniforms.
+  const probe = useRef({ on: false, point: new THREE.Vector3() })
+  const hide = () => { probe.current.on = false; onProbe(null) }
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     if (e.pointerType === 'touch') return
-    const { x, y, z } = e.point
-    if (!dem.onMap(x, z)) { onProbe(null); return }
+    const { x, z } = e.point
+    if (!dem.onMap(x, z)) { hide(); return }
     const { lon, lat } = worldToLonLat(x, z)
-    const m = Math.round(dem.metersAt(lon, lat))
-    const fmt = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? pos : neg}`
-    onProbe({
-      text: `LAT ${fmt(lat, 'N', 'S')}  LON ${fmt(lon, 'E', 'W')}  ELEV ${m >= 0 ? '+' : '−'}${Math.abs(m).toLocaleString('en-US')} m`,
-      sx: e.nativeEvent.offsetX, sy: e.nativeEvent.offsetY, point: [x, y, z],
-    })
+    probe.current.on = true
+    probe.current.point.copy(e.point)
+    const u = matRef.current?.uniforms
+    if (u) {
+      u.uProbe.value.set(x, z)
+      u.uProbeKm.value = dem.kmAt(x, z)
+    }
+    onProbe({ lon, lat, meters: dem.metersAt(lon, lat), sx: e.nativeEvent.offsetX, sy: e.nativeEvent.offsetY })
   }
+  // Fade the probe in/out, and keep the crosshair a constant size on screen.
+  useFrame(({ camera, size }, delta) => {
+    const u = matRef.current?.uniforms
+    if (!u) return
+    const target = probe.current.on ? 1 : 0
+    u.uProbeOn.value = skip ? target : u.uProbeOn.value + (target - u.uProbeOn.value) * (1 - Math.exp(-delta * 14))
+    const fov = (camera as THREE.PerspectiveCamera).fov * THREE.MathUtils.DEG2RAD
+    const pxWorld = (2 * Math.tan(fov / 2) * camera.position.distanceTo(probe.current.point)) / size.height
+    u.uReticle.value = RETICLE_PX * pxWorld
+  })
 
   // Solid surface + grid drawn in the shader: hills naturally hide the lines behind them.
-  return <mesh geometry={geo} material={mat} onPointerMove={onMove} onPointerOut={() => onProbe(null)} />
-}
-
-/** Flat crosshair ring that follows the probe on the surface. */
-function ProbeCross({ crossRef }: { crossRef: React.Ref<THREE.Mesh> }) {
-  return (
-    <mesh ref={crossRef} rotation-x={-Math.PI / 2} visible={false} renderOrder={2}>
-      <ringGeometry args={[0.55, 0.75, 32]} />
-      <meshBasicMaterial color="#e6e6df" transparent opacity={0.85} depthTest={false} />
-    </mesh>
-  )
+  return <mesh geometry={geo} material={mat} onPointerMove={onMove} onPointerOut={hide} />
 }
 
 /**
@@ -299,17 +309,36 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
   const rovers = useMemo(() => new Set(items.filter((h) => h.kind === 'rover').map((h) => h.id)), [items])
   const selectedMission = items.find((h) => h.id === selectedId)?.mission ?? null
   const probeLabel = useRef<HTMLDivElement>(null)
-  const probeCross = useRef<THREE.Mesh>(null)
-  // Probe updates go straight to the DOM / mesh (no React re-render on every mouse move).
+  const parts = useRef<Record<string, HTMLElement>>({})
+  const part = (k: string) => (el: HTMLElement | null) => { if (el) parts.current[k] = el }
+  // Probe updates go straight to the DOM (no React re-render on every mouse move).
   const onProbe = (hit: ProbeHit | null) => {
-    const label = probeLabel.current, cross = probeCross.current
-    if (!label || !cross) return
-    if (!hit) { label.style.display = 'none'; cross.visible = false; return }
-    label.textContent = hit.text
-    label.style.display = ''
-    label.style.transform = `translate(${hit.sx + 14}px, ${hit.sy + 14}px)`
-    cross.position.set(hit.point[0], hit.point[1] + 0.08, hit.point[2])
-    cross.visible = true
+    const label = probeLabel.current, P = parts.current
+    if (!label) return
+    if (!hit) { label.classList.remove('is-on'); return }
+    const { lon, lat, meters, sx, sy } = hit
+    const r = planet.radiusKm
+    const place = nearestFeature(lon, lat, feats, r)
+    P.place.textContent = place ? place.name : ''
+    P.placeDir.textContent = place && !place.inside ? `${place.arrow} ${fmtKm(place.km)} km` : ''
+    const m = Math.round(meters)
+    P.elev.textContent = `${m >= 0 ? '+' : '−'}${Math.abs(m).toLocaleString('en-US')} m`
+    const g = heightGauge(dem ? dem.percentileOf(meters) : 0.5)
+    P.g1.textContent = g.before
+    P.g2.textContent = g.after
+    const site = nearestSite(lon, lat, items, r)
+    P.siteRow.style.display = site ? '' : 'none'
+    if (site) {
+      P.siteRow.classList.toggle('is-active', site.active)
+      P.site.textContent = site.name.toUpperCase()
+      P.siteDir.textContent = site.inside ? 'HERE' : `${site.arrow} ${fmtKm(site.km)} km`
+    }
+    // the box grows toward the middle of the map, never off its edge
+    const w = label.parentElement?.clientWidth ?? 0
+    label.classList.toggle('is-flipx', sx > w * 0.55)
+    label.classList.toggle('is-flipy', sy < 110)
+    label.style.transform = `translate(${sx}px, ${sy}px)`
+    label.classList.add('is-on')
   }
 
   // Landing order (1966 → 1972) drives the marker ping-in delay.
@@ -336,7 +365,6 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
         <color attach="background" args={[BG]} />
         <fog attach="fog" args={[BG, ...planet.fog]} />
         {dem && <Terrain dem={dem} trueScale={trueScale} lavaLevel={lavaLevel} onProbe={onProbe} />}
-        <ProbeCross crossRef={probeCross} />
         {dem && polesOn && reflectors.length > 0 && <LaserBeams dem={dem} anchors={reflectors} />}
         {dem && polesOn && isMoon && <Traverses dem={dem} visibleRovers={rovers} highlightMission={selectedMission} />}
         {dem && <Projector dem={dem} positions={positions} els={els} />}
@@ -344,7 +372,20 @@ export default function MoonScene({ items, selectedId, onSelect, trueScale, lava
         <CameraRig selectedId={selectedId} positions={positions} />
       </Canvas>
 
-      <div className="probe" ref={probeLabel} style={{ display: 'none' }} aria-hidden />
+      <div className="probe" ref={probeLabel} aria-hidden>
+        <svg className="probe__lead" width="34" height="28" viewBox="0 0 34 28">
+          <polyline points="10,18 22,6 34,6" />
+        </svg>
+        {/* two rows: place + elevation, then height gauge + nearest landing site */}
+        <div className="probe__box">
+          <span className="probe__place"><span ref={part('place')} /><span className="probe__dir" ref={part('placeDir')} /></span>
+          <b className="probe__elev" ref={part('elev')} />
+          <span className="probe__gauge">lo <span ref={part('g1')} /><b>▲</b><span ref={part('g2')} /> hi</span>
+          <span className="probe__site" ref={part('siteRow')}>
+            <i /><span ref={part('site')} /><span className="probe__dir" ref={part('siteDir')} />
+          </span>
+        </div>
+      </div>
 
       <div className={`features${dem ? ' is-on' : ''}`} aria-hidden>
         {feats.map((f) => (
