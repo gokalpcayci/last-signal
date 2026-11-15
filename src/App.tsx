@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MoonScene from './scene/MoonScene'
+import DeepSpaceScene from './scene/DeepSpaceScene'
 import Globe from './ui/Globe'
 import { STACKED_QUERY } from './layout'
 import SunNow from './ui/SunNow'
 import { hardware, kindLabel, type HardwareKind } from './data/hardware'
 import { marsHardware } from './data/mars'
-import { PLANETS, type PlanetId } from './scene/planets'
+import { deepSpaceHardware } from './data/deepspace'
+import { WORLDS, isPlanet, type WorldId } from './scene/planets'
 import {
   IconArrowRight, IconChevronLeft, IconChevronRight, IconCompass,
   IconPulse, IconShuffle,
@@ -18,6 +20,8 @@ import BootLoader from './ui/BootLoader'
 import { introPlays } from './boot'
 import SignalChart, { TIMELINES } from './ui/SignalChart'
 import StrandedGame from './ui/StrandedGame'
+import SignalDelay from './ui/SignalDelay'
+import DistanceLadder from './ui/DistanceLadder'
 import { StoryPhoto } from './ui/StoryPhoto'
 import TextEffect from './ui/TextEffect'
 import { usePresence } from './ui/usePresence'
@@ -37,13 +41,17 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'reflector', label: 'Laser mirrors' },
   { id: 'robot', label: 'Robot landers' },
   { id: 'helicopter', label: 'Helicopters' },
+  { id: 'probe', label: 'Space probes' },
+  { id: 'telescope', label: 'Telescopes' },
 ]
-const HARDWARE: Record<PlanetId, typeof hardware> = { moon: hardware, mars: marsHardware }
+const HARDWARE: Record<WorldId, typeof hardware> = { moon: hardware, mars: marsHardware, deep: deepSpaceHardware }
 /** Where the "start the tour" buttons fly to */
-const START: Record<PlanetId, { id: string; label: string }> = {
+const START: Record<WorldId, { id: string; label: string }> = {
   moon: { id: 'a11-lm', label: 'Apollo 11' },
   mars: { id: 'viking-1', label: 'Viking 1' },
+  deep: { id: 'voyager-1', label: 'Voyager 1' },
 }
+const AU = new Map(deepSpaceHardware.map((h) => [h.id, h.au]))
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
 const ROWS = ['1', '2', '3', '4', '5']
 
@@ -66,10 +74,14 @@ const fmtDate = (s: string) =>
     : s
 
 export default function App() {
-  const [planet, setPlanetId] = useState<PlanetId>('moon')
-  // terrain.ts reads the active body; set it before any child renders (scene + globe are keyed by planet)
-  setPlanet(planet)
-  const P = PLANETS[planet]
+  const [planet, setPlanetId] = useState<WorldId>('moon')
+  // terrain.ts reads the active body; set it before any child renders (scene + globe are keyed by planet).
+  // Deep Space has no terrain (DeepSpaceScene): terrain.ts keeps the last body, unused.
+  const terrain = isPlanet(planet) ? planet : null
+  if (terrain) setPlanet(terrain)
+  const isDeep = planet === 'deep'
+  const W = WORLDS[planet]
+  const where = isDeep ? 'in deep space' : `on ${W.name}`
   const list = HARDWARE[planet]
   const start = START[planet]
   const [filter, setFilter] = useState<Filter>('all')
@@ -91,7 +103,7 @@ export default function App() {
   const currentFilter = FILTERS.find((f) => f.id === filter)?.label ?? 'All hardware'
   // only offer filters for kinds this body actually has
   const filters = FILTERS.filter((f) => f.id === 'all' || list.some((h) => h.kind === f.id))
-  const switchPlanet = (id: PlanetId) => {
+  const switchPlanet = (id: WorldId) => {
     if (id === planet) return
     setPlanetId(id)
     setSelectedId(null)
@@ -139,7 +151,9 @@ export default function App() {
         </div>
 
         <div className="scene">
-          <MoonScene key={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} />
+          {isDeep
+            ? <DeepSpaceScene key="deep" items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} until={until} />
+            : <MoonScene key={planet} items={items} selectedId={selectedId} onSelect={setSelectedId} trueScale={trueScale} lavaLevel={lava} />}
         </div>
 
         {/* top-left: logo + nav */}
@@ -163,16 +177,15 @@ export default function App() {
                 ))}
               </ul>
               <div className="planet-switch" role="group" aria-label="Choose a world">
-                {(Object.keys(PLANETS) as PlanetId[]).map((id) => (
+                {(Object.keys(WORLDS) as WorldId[]).map((id) => (
                   <button key={id} className={planet === id ? 'is-on' : ''} aria-pressed={planet === id} onClick={() => switchPlanet(id)}
-                    title={`Explore what we left on ${PLANETS[id].name}`}>
+                    title={`Explore what we left ${id === 'deep' ? 'in deep space' : `on ${WORLDS[id].name}`}`}>
                     <PlanetIcon id={id} active={planet === id} size={stacked ? 34 : 40} />
-                    <OrbitLabel size={stacked ? 34 : 40} text={PLANETS[id].label.toUpperCase()} />
-                    <span className="te__sr">{PLANETS[id].label}</span>
+                    <OrbitLabel size={stacked ? 34 : 40} text={WORLDS[id].label.toUpperCase()} />
+                    <span className="te__sr">{WORLDS[id].label}</span>
                   </button>
                 ))}
               </div>
-              <div className="nav__soon">DEEP SPACE — SOON</div>
             </div>
           </div>
           <NavEdge />
@@ -191,11 +204,13 @@ export default function App() {
               <StoryPhoto id={story.id} />
               <dl>
                 <dt>Site</dt><dd><TextEffect per="word" trigger={!leaving} delay={0.25}>{story.site}</TextEffect></dd>
-                <dt>Arrived</dt><dd><TextEffect trigger={!leaving} delay={0.3}>{fmtDate(story.arrived)}</TextEffect></dd>
+                <dt>{isDeep ? 'Launched' : 'Arrived'}</dt><dd><TextEffect trigger={!leaving} delay={0.3}>{fmtDate(story.arrived)}</TextEffect></dd>
                 <dt>Last signal</dt><dd><TextEffect trigger={!leaving} delay={0.35}>{fmtDate(story.lastSignal)}</TextEffect></dd>
-                <dt>Coords</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${story.lat.toFixed(2)}°, ${story.lon.toFixed(2)}°`}</TextEffect></dd>
+                {isDeep
+                  ? <><dt>Distance</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${AU.get(story.id)} AU from the Sun`}</TextEffect></dd></>
+                  : <><dt>Coords</dt><dd><TextEffect trigger={!leaving} delay={0.4}>{`${story.lat.toFixed(2)}°, ${story.lon.toFixed(2)}°`}</TextEffect></dd></>}
               </dl>
-              <SunNow lat={story.lat} lon={story.lon} name={story.mission} body={planet} />
+              {terrain && <SunNow lat={story.lat} lon={story.lon} name={story.mission} body={terrain} />}
               <TextEffect as="p" per="word" trigger={!leaving} delay={0.45}>{story.story}</TextEffect>
               <div className="dyk"><span>DID YOU KNOW?</span><TextEffect per="word" trigger={!leaving} delay={0.8}>{story.didYouKnow}</TextEffect></div>
               <a href={story.source} target="_blank" rel="noreferrer">NASA RECORD →</a>
@@ -205,12 +220,14 @@ export default function App() {
               <div className="stat">
                 <div>
                   <div className="stat__num">{list.length}<small> objects</small></div>
-                  <div className="stat__label">Left on {P.name}</div>
+                  <div className="stat__label">Left {where}</div>
                 </div>
                 <Gauge value={active / list.length} />
               </div>
               <button className="view" onClick={() => setSelectedId(start.id)}>Start at {start.label} <IconArrowRight /></button>
-              <Globe key={planet} items={items} selectedId={selectedId} />
+              {isDeep
+                ? <DistanceLadder items={deepSpaceHardware.filter((h) => items.includes(h))} selectedId={selectedId} onSelect={setSelectedId} />
+                : <Globe key={planet} items={items} selectedId={selectedId} />}
             </>
           )}
         </section>
@@ -231,9 +248,11 @@ export default function App() {
           <button
             className={`toolbar__scale${trueScale ? ' is-on' : ''}`}
             aria-pressed={trueScale}
-            title={trueScale ? `True scale: ${P.name} is really this flat` : `Mountains are stretched ×${exaggeration()} so you can see them. Click for true scale`}
+            title={isDeep
+              ? (trueScale ? 'True distances: the inner planets crowd into one dot next to the Sun' : 'Distances are squeezed so everything fits. Click for true scale')
+              : (trueScale ? `True scale: ${W.name} is really this flat` : `Mountains are stretched ×${exaggeration()} so you can see them. Click for true scale`)}
             onClick={() => setTrueScale((v) => !v)}
-          >{trueScale ? '1:1' : `×${exaggeration()}`}</button>
+          >{trueScale ? '1:1' : isDeep ? 'LOG' : `×${exaggeration()}`}</button>
           {planet === 'moon' && <button
             className={`toolbar__scale toolbar__lava${lava !== null ? ' is-on' : ''}`}
             aria-pressed={lava !== null}
@@ -258,7 +277,9 @@ export default function App() {
 
         {/* bottom row */}
         <section className="bottom">
-          <StrandedGame key={`stranded-${planet}`} planet={planet} onSelect={setSelectedId} />
+          {terrain
+            ? <StrandedGame key={`stranded-${planet}`} planet={terrain} onSelect={setSelectedId} />
+            : <SignalDelay onSelect={setSelectedId} />}
 
           <div className="panel radar">
             <div className="blip blip--g" style={{ left: '22%', top: '25%' }} />

@@ -137,6 +137,20 @@ const GLYPH: Record<string, (g: CanvasRenderingContext2D) => void> = {
     g.beginPath(); g.ellipse(15, 16, 5, 4, 0, 0, Math.PI * 2); g.fill()
     g.beginPath(); g.moveTo(11, 19); g.lineTo(7, 25); g.moveTo(19, 19); g.lineTo(23, 25); g.stroke()
   },
+  probe(g) { // Voyager-style: big dish, bus below, a long boom and the power arm
+    g.beginPath(); g.ellipse(14, 9, 9, 3.6, 0, 0, Math.PI * 2); g.fill()
+    g.fillRect(11, 13, 6, 5)
+    g.lineWidth = 2; g.beginPath(); g.moveTo(17, 16); g.lineTo(28, 25); g.moveTo(11, 17); g.lineTo(4, 24); g.stroke()
+    g.fillRect(3, 23, 4, 4)
+    g.lineWidth = 1.6; g.beginPath(); g.moveTo(14, 9); g.lineTo(14, 3); g.stroke()
+  },
+  telescope(g) { // tube with an open end and a sun shield
+    g.save(); g.translate(15, 15); g.rotate(-0.6)
+    g.fillRect(-9, -4, 16, 8)
+    g.lineWidth = 2; g.beginPath(); g.moveTo(7, -6); g.lineTo(11, -6); g.moveTo(7, 6); g.lineTo(11, 6); g.stroke()
+    g.fillRect(-12, -9, 2.4, 18)
+    g.restore()
+  },
 }
 
 // ───────────────────────── face ─────────────────────────

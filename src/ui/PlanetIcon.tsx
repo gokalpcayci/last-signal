@@ -1,20 +1,21 @@
 import { useEffect, useId, useRef } from 'react'
 import { LedEngine } from '../brand/ledEngine'
-import { discGrid, planetMask } from '../brand/planetDisc'
-import type { PlanetId } from '../scene/planets'
+import { deepMask, discGrid, planetMask } from '../brand/planetDisc'
+import type { WorldId } from '../scene/planets'
 
 /**
  * LED planet disc for the planet switch (src/brand/planetDisc.ts): the real surface, lit by the
  * real Sun right now. Same engine as the logo and the filter toggle: ghost LEDs, boot flicker-in,
  * hover = small tear + sparkle, a split hiccup when it becomes the active world.
- * Moon prints in Regolith; Mars in a muted sandy rust (kept apart from the status orange #e56b47).
+ * Moon prints in Regolith; Mars in a muted sandy rust (kept apart from the status orange #e56b47);
+ * Deep Space shows a tiny Sun-and-orbits picture in pale sunlight (deepMask).
  */
 
-const INK: Record<PlanetId, string> = { moon: '#e6e6df', mars: '#d4875a' }
+const INK: Record<WorldId, string> = { moon: '#e6e6df', mars: '#d4875a', deep: '#f2e3b3' }
 const REFRESH_MS = 5 * 60 * 1000 // the terminator creeps; Mars' moves ~1° every 4 min
 
 /** Put it inside a button: hovering the button sparkles the disc. */
-export default function PlanetIcon({ id, active, size }: { id: PlanetId; active: boolean; size: number }) {
+export default function PlanetIcon({ id, active, size }: { id: WorldId; active: boolean; size: number }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const engine = useRef<LedEngine | null>(null)
 
@@ -26,7 +27,7 @@ export default function PlanetIcon({ id, active, size }: { id: PlanetId; active:
     e.resize(size)
     e.setMask([], { instant: true }) // ghost disc until the albedo arrives
     let alive = true
-    const update = () => planetMask(id).then((m) => { if (alive) e.setMask(m, { mode: 'random' }) }).catch((err) => console.error(`PlanetIcon: ${id} albedo failed to load`, err)) // disc stays as ghost LEDs
+    const update = () => (id === 'deep' ? Promise.resolve(deepMask()) : planetMask(id)).then((m) => { if (alive) e.setMask(m, { mode: 'random' }) }).catch((err) => console.error(`PlanetIcon: ${id} albedo failed to load`, err)) // disc stays as ghost LEDs
     e.play('intro').then(() => { if (alive) e.play('ambient') })
     update()
     const t = setInterval(update, REFRESH_MS)

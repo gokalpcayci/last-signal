@@ -111,3 +111,12 @@ export const PLANETS: Record<PlanetId, Planet> = {
     globe: { belowM: -3000, lonMin: -180, lonMax: 180, step: 4 },
   },
 }
+
+/** Every place the nav can switch to: the two terrain bodies plus Deep Space (no terrain, see DeepSpaceScene). */
+export type WorldId = PlanetId | 'deep'
+export const WORLDS: Record<WorldId, { name: string; label: string }> = {
+  moon: { name: PLANETS.moon.name, label: PLANETS.moon.label },
+  mars: { name: PLANETS.mars.name, label: PLANETS.mars.label },
+  deep: { name: 'deep space', label: 'Deep' },
+}
+export const isPlanet = (w: WorldId): w is PlanetId => w !== 'deep'

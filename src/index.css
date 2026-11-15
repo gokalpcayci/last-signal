@@ -478,3 +478,23 @@ html.booting .nav .logo { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .te__p, .te-fade, .te--out .te__p { animation: none; }
 }
+
+/* ── Deep Space (src/ui/SignalDelay.tsx, src/ui/DistanceLadder.tsx) ── */
+.delay { display: flex; flex-direction: column; gap: 8px; font: 10px/1.5 var(--mono); }
+.delay__lead { margin: 0; color: var(--dim); }
+.delay__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.delay__rows li { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.delay__name { min-width: 104px; text-align: left; }
+.delay__time { color: var(--text); }
+.delay__ping { margin-left: auto; color: var(--ok); letter-spacing: .08em; }
+.delay__ping:hover { color: var(--text); }
+.delay__fly { white-space: pre; font-variant-ligatures: none; }
+
+.ladder { margin-top: 18px; font: 10px/1.7 var(--mono); font-variant-ligatures: none; }
+.ladder__ruler { color: var(--faint); white-space: pre; letter-spacing: 0; }
+.ladder__row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; width: 100%; text-align: left; color: var(--dim); }
+.ladder__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ladder__row:hover, .ladder__row.is-on { color: var(--text); }
+.ladder__track { white-space: pre; color: var(--faint); }
+.ladder__au { color: var(--dim); }
+.ladder__note { margin-top: 8px; color: var(--faint); font-size: 9px; }

@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { hardware, type Hardware } from '../data/hardware'
 import { marsHardware } from '../data/mars'
-import type { PlanetId } from '../scene/planets'
+import type { WorldId } from '../scene/planets'
+import { deepSpaceHardware } from '../data/deepspace'
 
 /**
  * Bottom-right analytics panel: a side-scrolling telemetry printout, 1966 → today
@@ -102,6 +103,24 @@ const MARS_CFG: TimelineCfg = {
   ruler: Array.from({ length: Math.floor((NOW - 3 - 1976) / 4) + 1 }, (_, i) => ({ text: yr2(1976 + i * 4), t: 1976 + i * 4, dx: 0 })),
 }
 
+const DEEP_SHORT: Record<string, string> = {
+  'Pioneer 10': 'P10', 'Pioneer 11': 'P11', 'Voyager 2': 'VGR2', 'Voyager 1': 'VGR1', 'Ulysses (ESA/NASA)': 'ULYS',
+  'NEAR Shoemaker': 'NEAR', Stardust: 'STAR', 'Spitzer Space Telescope': 'SPTZ', 'Deep Impact / EPOXI': 'DI',
+  'New Horizons': 'NH', Dawn: 'DAWN', 'Kepler / K2': 'KEPL',
+}
+const DEEP_CFG: TimelineCfg = {
+  // launches spread over 1972–2009, then the long cruise: one linear axis
+  t0: 1972, tb: NOW, squeeze: 1, yearsPerScreen: 16,
+  short: (m) => DEEP_SHORT[m] ?? UP(m).slice(0, 4),
+  mark: (m) => DEEP_SHORT[m] ?? null,
+  missionEvents: (_m, hs, ARR, END) => {
+    const ev: Ev[] = [{ t: ARR.get(hs[0].id)!, text: `${names(hs)} LAUNCHES` }]
+    for (const h of hs) if (h.status === 'silent') ev.push({ t: END.get(h.id)!, text: `${UP(h.name)} GOES QUIET` })
+    return ev
+  },
+  ruler: Array.from({ length: Math.floor((NOW - 3 - 1972) / 4) + 1 }, (_, i) => ({ text: yr2(1972 + i * 4), t: 1972 + i * 4, dx: 0 })),
+}
+
 function makeTimeline(list: Hardware[], cfg: TimelineCfg) {
   const ARR = new Map(list.map((h) => [h.id, toYear(h.arrived)]))
   const END = new Map(list.map((h) => [h.id, toYear(h.lastSignal)]))
@@ -162,9 +181,10 @@ function makeTimeline(list: Hardware[], cfg: TimelineCfg) {
 }
 type Timeline = ReturnType<typeof makeTimeline>
 
-export const TIMELINES: Record<PlanetId, Timeline> = {
+export const TIMELINES: Record<WorldId, Timeline> = {
   moon: makeTimeline(hardware, MOON_CFG),
   mars: makeTimeline(marsHardware, MARS_CFG),
+  deep: makeTimeline(deepSpaceHardware, DEEP_CFG),
 }
 
 const GUTTER = 34, PAD = 10
@@ -273,7 +293,7 @@ function buildAscii(tl: Timeline, o: {
 
 /** Key by planet: scroll position and measurements belong to one timeline. */
 export default function SignalChart({ planet, items, selectedId, onSelect, onTime }: {
-  planet: PlanetId
+  planet: WorldId
   items: Hardware[]
   selectedId: string | null
   onSelect: (id: string) => void

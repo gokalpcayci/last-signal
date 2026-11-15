@@ -98,3 +98,27 @@ export async function planetMask(id: PlanetId, date = new Date(), n = DISC): Pro
     return tone > bayer[i] ? NIGHT + (1 - NIGHT) * day : 0
   })
 }
+
+/**
+ * Deep Space button: no surface to print, so the disc shows a tiny solar system instead — the Sun
+ * in the middle, two orbits as dotted rings, and one probe out past the edge of the outer one.
+ * Same cell order as `discGrid(n)`.
+ */
+export function deepMask(n = DISC): Float32Array {
+  const out: number[] = []
+  const R = n / 2
+  const probe = { u: 0.62, v: -0.62 } // top right
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const u = (x + 0.5 - R) / R, v = (y + 0.5 - R) / R
+    const r2 = u * u + v * v
+    if (r2 > 1) continue
+    const r = Math.sqrt(r2), a = Math.atan2(v, u)
+    let m = 0
+    if (r < 0.17) m = 1                                                    // Sun
+    else if (Math.abs(r - 0.42) < 0.05 && Math.sin(a * 9) > -0.2) m = NIGHT // inner orbit, dotted
+    else if (Math.abs(r - 0.74) < 0.05 && Math.sin(a * 15) > -0.2) m = NIGHT // outer orbit, dotted
+    if (Math.hypot(u - probe.u, v - probe.v) < 0.12) m = 1                  // the probe
+    out.push(m)
+  }
+  return Float32Array.from(out)
+}
