@@ -53,3 +53,10 @@ kid-friendly language with a real mission-control feel.
 bun install
 bun run dev
 ```
+
+## License
+Copyright (c) 2026 Gökalp Çaycı. All rights reserved.
+
+This project is **not open source**. The code is visible for viewing only; copying,
+modifying, redistributing, hosting, or reusing any code or assets is not permitted
+without written permission. See [LICENSE](LICENSE) for details.

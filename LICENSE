@@ -1,0 +1,61 @@
+Copyright (c) 2026 Gökalp Çaycı. All rights reserved.
+
+Last Signal — PROPRIETARY LICENSE
+
+This repository and everything in it, including but not limited to the source
+code, compiled builds, visual design, user interface, 3D scenes, images,
+logos, video, audio, text, written content, curated data, and any other
+assets (together, the "Work"), are the exclusive property of the copyright
+holder and are protected by copyright and other intellectual property laws.
+
+The source code is publicly visible for viewing and reference only. Being able
+to see the Work does not grant you any rights to use it.
+
+1. NO LICENSE GRANTED
+   Except for the limited viewing permission in section 2, no permission is
+   granted to any person, by implication, estoppel, or otherwise, to use the
+   Work in any way.
+
+2. PERMITTED USE
+   You may view the Work on GitHub and visit the official hosted version of
+   the project in a web browser for personal, non-commercial purposes.
+
+3. PROHIBITED USE
+   Without prior written permission from the copyright holder, you may NOT:
+   a. copy, clone for redistribution, download for reuse, or reproduce the
+      Work or any part of it;
+   b. modify, adapt, translate, or create derivative works based on the Work,
+      including projects that reproduce its look, design, or assets;
+   c. reuse, extract, or repurpose any assets (images, models, logos, video,
+      audio, styles, layouts, or text) in any other project;
+   d. distribute, publish, sublicense, sell, rent, lease, or otherwise make
+      the Work or any part of it available to others;
+   e. host, deploy, or mirror the Work or any modified version of it;
+   f. use the Work or any part of it for commercial purposes;
+   g. use the Work, in whole or in part, to train, fine-tune, or evaluate
+      machine learning or artificial intelligence models;
+   h. remove or alter this notice or any copyright notices in the Work.
+
+   Forking the repository on GitHub is permitted only to the extent required
+   by the GitHub Terms of Service; a fork grants no rights beyond those in
+   section 2.
+
+4. THIRD-PARTY MATERIAL
+   This license does not apply to third-party software, libraries, or data
+   included in or used by the Work. Such material remains subject to its own
+   license or public-domain status (for example, open-source dependencies
+   listed in package.json and NASA/JPL data sources credited in README.md).
+   This license covers the copyright holder's own original contributions,
+   selection, arrangement, and presentation.
+
+5. TERMINATION
+   Any use of the Work in violation of this license automatically terminates
+   any permission you may have had and may result in legal action.
+
+6. DISCLAIMER
+   THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+   DAMAGES, OR OTHER LIABILITY ARISING FROM OR IN CONNECTION WITH THE WORK.
+
+For permission requests, contact the copyright holder through their GitHub
+profile: https://github.com/gokalpcayci
