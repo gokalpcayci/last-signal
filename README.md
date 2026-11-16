@@ -57,6 +57,6 @@ bun run dev
 ## License
 Copyright (c) 2026 Gökalp Çaycı. All rights reserved.
 
-This project is **not open source**. The code is visible for viewing only; copying,
-modifying, redistributing, hosting, or reusing any code or assets is not permitted
-without written permission. See [LICENSE](LICENSE) for details.
+This project is **not open source**. You're welcome to fork it, run it locally and learn
+from it, but you may not republish it, host it, reuse its assets, or present it as your own
+work. See [LICENSE](LICENSE) for details.
